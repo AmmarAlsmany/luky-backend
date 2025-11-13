@@ -87,6 +87,21 @@ return [
     'create_provider' => 'Create Provider',
     'phone_otp_hint' => 'Provider will use this phone number for OTP login',
     
+    // Contract
+    'contract_details' => 'Contract Details',
+    'contract' => 'Contract',
+    'contract_number' => 'Contract Number',
+    'contract_start_date' => 'Contract Start Date',
+    'contract_end_date' => 'Contract End Date',
+    'contract_end_date_hint' => 'Leave empty for open-ended contract',
+    'payment_terms' => 'Payment Terms',
+    'payment_terms_placeholder' => 'e.g., Monthly payment on 1st of each month',
+    'contract_notes' => 'Contract Notes',
+    'contract_notes_placeholder' => 'Additional notes or special terms',
+    'ongoing' => 'Ongoing',
+    'no_contract' => 'No Contract',
+    'contract_status' => 'Contract Status',
+    
     // Details Page
     'send_message' => 'Send a Message',
     'quick_note' => 'A quick note to the Provider',
@@ -234,4 +249,13 @@ return [
     'view_document' => 'View',
     'document_number' => 'Document :number',
     'unknown' => 'Unknown',
+    
+    // Document Upload
+    'upload_documents_hint' => 'Upload required documents for provider verification (PDF, JPG, PNG - max 5MB each)',
+    'freelance_license' => 'Freelance License',
+    'commercial_register' => 'Commercial Register',
+    'municipal_license' => 'Municipal License',
+    'national_id' => 'National ID',
+    'agreement_contract' => 'Agreement Contract',
+    'file_format_hint' => 'Accepted formats: PDF, JPG, PNG (Max: 5MB)',
 ];

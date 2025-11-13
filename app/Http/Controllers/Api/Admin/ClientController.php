@@ -114,12 +114,28 @@ class ClientController extends Controller
      */
     public function store(Request $request)
     {
+        // Use PhoneNumberService for normalization (same as mobile app)
+        $phoneService = new \App\Services\PhoneNumberService();
+        $normalizedPhone = $phoneService->normalize($request->input('phone'));
+
+        // Saudi phone number validation rule (same as mobile app)
+        $phoneRule = new \App\Rules\SaudiPhoneNumber();
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email,NULL,id,deleted_at,NULL',
-            'phone' => 'required|string|unique:users,phone,NULL,id,deleted_at,NULL',
-            'city_id' => 'nullable|exists:cities,id',
-            'gender' => 'nullable|in:male,female',
+            'email' => 'nullable|email|unique:users,email,NULL,id,deleted_at,NULL', // Optional (aligned with mobile)
+            'phone' => [
+                'required',
+                'string',
+                $phoneRule, // Saudi phone format validation
+                'unique:users,phone,NULL,id,deleted_at,NULL'
+            ],
+            'city_id' => 'required|exists:cities,id', // Required (aligned with mobile)
+            'date_of_birth' => 'required|date|before:today', // Required (aligned with mobile)
+            'gender' => 'required|in:male,female', // Required (aligned with mobile)
+            'address' => 'nullable|string|max:500',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
         ]);
 
         if ($validator->fails()) {
@@ -132,13 +148,17 @@ class ClientController extends Controller
 
         DB::beginTransaction();
         try {
-            // Create user
+            // Create user with normalized phone (same as mobile app)
             $client = User::create([
                 'name' => $request->name,
-                'email' => $request->email,
-                'phone' => $request->phone,
+                'email' => $request->email, // Optional field
+                'phone' => $normalizedPhone, // Normalized phone number
                 'city_id' => $request->city_id,
-                'gender' => $request->gender ?? 'female',
+                'date_of_birth' => $request->date_of_birth,
+                'gender' => $request->gender,
+                'address' => $request->address,
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
                 'user_type' => 'client',
                 'status' => 'active',
                 'is_active' => true,

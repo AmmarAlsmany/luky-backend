@@ -51,7 +51,7 @@
                 </tr>
                 @foreach($permissions as $permission)
                 <tr>
-                  <td>{{ ucwords(str_replace('_', ' ', $permission->name)) }}</td>
+                  <td>{{ __('permissions.' . $permission->name) }}</td>
                   <td class="text-center">
                     <input class="form-check-input" 
                            type="checkbox" 

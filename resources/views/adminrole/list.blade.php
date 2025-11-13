@@ -480,8 +480,8 @@
         <tbody>
           @forelse($roles as $role)
           <tr>
-            <td class="fw-semibold">{{ ucwords(str_replace('_', ' ', $role['name'])) }}</td>
-            <td class="text-muted">{{ $role['name'] }} {{ __('users.role') }}</td>
+            <td class="fw-semibold">{{ $role['display_name'] }}</td>
+            <td class="text-muted">{{ $role['display_name'] }} {{ __('users.role') }}</td>
             <td>
               @if($role['permissions_count'] > 0)
                 <span class="badge bg-light-subtle text-muted border">{{ __('users.permissions_count', ['count' => $role['permissions_count']]) }}</span>

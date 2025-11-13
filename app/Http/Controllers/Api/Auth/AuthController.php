@@ -31,6 +31,7 @@ class AuthController extends Controller
 
         $request->validate([
             'name' => 'required|string|max:255',
+            'email' => 'nullable|email|unique:users,email', // Optional field (aligned with admin)
             'phone' => [
                 'required',
                 'string',
@@ -67,6 +68,7 @@ class AuthController extends Controller
         // Create user
         $user = User::create([
             'name' => $request->name,
+            'email' => $request->email, // Optional field
             'phone' => $normalizedPhone,
             'user_type' => $request->user_type,
             'city_id' => $request->city_id,

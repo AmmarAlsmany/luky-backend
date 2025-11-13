@@ -115,7 +115,7 @@ class UserRoleController extends Controller
             return [
                 'id' => $role->id,
                 'name' => $role->name,
-                'display_name' => ucwords(str_replace('_', ' ', $role->name)),
+                'display_name' => app()->getLocale() === 'ar' ? ($role->name_ar ?? ucwords(str_replace('_', ' ', $role->name))) : ($role->name_en ?? ucwords(str_replace('_', ' ', $role->name))),
                 'users_count' => $role->users_count,
                 'permissions_count' => $role->permissions->count(),
                 'permissions' => $role->permissions->pluck('name'),

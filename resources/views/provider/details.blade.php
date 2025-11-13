@@ -501,6 +501,59 @@
     </div>
 </div>
 
+<!-- Contract Information Section -->
+@if(!empty($provider['contract']))
+<div class="row mt-3">
+    <div class="col-lg-12">
+        <div class="card border-primary">
+            <div class="card-header bg-primary-subtle border-bottom border-primary">
+                <div class="d-flex align-items-center">
+                    <iconify-icon icon="solar:document-text-bold-duotone" class="fs-32 text-primary me-3"></iconify-icon>
+                    <div>
+                        <h4 class="card-title mb-0 fw-semibold text-primary">{{ __('providers.contract_details') }}</h4>
+                        <p class="text-muted mb-0 small">{{ __('providers.contract_number') }}: {{ $provider['contract']['contract_number'] }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <label class="text-muted small d-block mb-1">{{ __('providers.contract_start_date') }}</label>
+                        <h5 class="mb-0">{{ date('M d, Y', strtotime($provider['contract']['start_date'])) }}</h5>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="text-muted small d-block mb-1">{{ __('providers.contract_end_date') }}</label>
+                        @if($provider['contract']['end_date'])
+                            <h5 class="mb-0">{{ date('M d, Y', strtotime($provider['contract']['end_date'])) }}</h5>
+                        @else
+                            <span class="badge bg-info-subtle text-info fs-6">{{ __('providers.ongoing') }}</span>
+                        @endif
+                    </div>
+                </div>
+                
+                @if(!empty($provider['contract']['payment_terms']))
+                <div class="mt-4">
+                    <label class="text-muted small d-block mb-2">{{ __('providers.payment_terms') }}</label>
+                    <div class="alert alert-light mb-0">
+                        {{ $provider['contract']['payment_terms'] }}
+                    </div>
+                </div>
+                @endif
+                
+                @if(!empty($provider['contract']['notes']))
+                <div class="mt-3">
+                    <label class="text-muted small d-block mb-2">{{ __('providers.contract_notes') }}</label>
+                    <div class="alert alert-light mb-0">
+                        {{ $provider['contract']['notes'] }}
+                    </div>
+                </div>
+                @endif
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
 <!-- Payment Settings Section -->
 <div class="row mt-3">
     <div class="col-lg-12">

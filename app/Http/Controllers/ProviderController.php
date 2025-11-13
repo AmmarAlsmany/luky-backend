@@ -31,7 +31,9 @@ class ProviderController extends Controller
         $businessType = $request->input('business_type');
         $cityId = $request->input('city_id');
 
-        $query = ServiceProvider::with(['user', 'city'])
+        $query = ServiceProvider::with(['user', 'city', 'contracts' => function($q) {
+                $q->where('status', 'active')->latest();
+            }])
             ->withCount(['bookings as total_bookings'])
             ->withSum(['bookings as total_revenue' => function ($query) {
                 $query->where('status', 'completed');
@@ -73,6 +75,7 @@ class ProviderController extends Controller
         // Transform provider data
         $providers->getCollection()->transform(function ($provider) {
             $user = $provider->user;
+            $activeContract = $provider->contracts->first();
 
             return [
                 'id' => $provider->id,
@@ -96,6 +99,12 @@ class ProviderController extends Controller
                     'name_ar' => $provider->city->name_ar ?? '',
                 ] : null,
                 'city_name' => $provider->city ? (app()->getLocale() === 'ar' ? $provider->city->name_ar : $provider->city->name_en) : 'N/A',
+                'contract' => $activeContract ? [
+                    'contract_number' => $activeContract->contract_number,
+                    'start_date' => $activeContract->start_date->format('Y-m-d'),
+                    'end_date' => $activeContract->end_date?->format('Y-m-d'),
+                    'status' => $activeContract->status,
+                ] : null,
                 'created_at' => $provider->created_at,
                 'updated_at' => $provider->updated_at,
             ];
@@ -203,7 +212,7 @@ class ProviderController extends Controller
             'email' => 'required|email|unique:users,email',
             'phone' => 'required|string|unique:users,phone',
             'business_name' => 'required|string|max:255',
-            'business_type' => 'required|in:salon,clinic,makeup_artist,hair_stylist,individual,company,establishment',
+            'business_type' => 'required|in:salon,clinic,makeup_artist,hair_stylist',
             'description' => 'nullable|string|max:1000',
             'city_id' => 'required|exists:cities,id',
             'address' => 'nullable|string|max:500',
@@ -211,6 +220,11 @@ class ProviderController extends Controller
             'longitude' => 'nullable|numeric|between:-180,180',
             'working_hours' => 'nullable|array',
             'off_days' => 'nullable|array',
+            'documents.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120', // 5MB max per file
+            'contract_start_date' => 'nullable|date',
+            'contract_end_date' => 'nullable|date|after:contract_start_date',
+            'payment_terms' => 'nullable|string|max:1000',
+            'contract_notes' => 'nullable|string|max:1000',
         ]);
 
         DB::beginTransaction();
@@ -221,14 +235,13 @@ class ProviderController extends Controller
                 'email' => $validated['email'],
                 'phone' => $validated['phone'],
                 'user_type' => 'provider',
-                'status' => 'pending',
                 'city_id' => $validated['city_id'],
             ]);
 
             $user->assignRole('provider');
 
             // Create provider profile
-            ServiceProvider::create([
+            $provider = ServiceProvider::create([
                 'user_id' => $user->id,
                 'business_name' => $validated['business_name'],
                 'business_type' => $validated['business_type'],
@@ -243,6 +256,46 @@ class ProviderController extends Controller
                 'commission_rate' => 15.00,
                 'is_active' => false,
             ]);
+
+            // Handle document uploads
+            if ($request->has('documents')) {
+                $documentTypes = ['freelance_license', 'commercial_register', 'municipal_license', 'national_id', 'agreement_contract'];
+                
+                foreach ($documentTypes as $docType) {
+                    if ($request->hasFile("documents.{$docType}")) {
+                        $file = $request->file("documents.{$docType}");
+                        $fileName = time() . '_' . $docType . '_' . $file->getClientOriginalName();
+                        $filePath = $file->storeAs('provider_documents/' . $provider->id, $fileName, 'public');
+
+                        // Create document record
+                        ProviderDocument::create([
+                            'provider_id' => $provider->id,
+                            'document_type' => $docType,
+                            'file_path' => $filePath,
+                            'original_name' => $file->getClientOriginalName(),
+                            'mime_type' => $file->getMimeType(),
+                            'file_size' => $file->getSize(),
+                            'verification_status' => 'pending',
+                        ]);
+                    }
+                }
+            }
+
+            // Create provider contract (if start date is provided)
+            if (!empty($validated['contract_start_date'])) {
+                $contractNumber = 'CON-' . strtoupper(uniqid());
+                \App\Models\ProviderContract::create([
+                    'provider_id' => $provider->id,
+                    'contract_number' => $contractNumber,
+                    'start_date' => $validated['contract_start_date'],
+                    'end_date' => $validated['contract_end_date'] ?? null,
+                    'commission_rate' => 15.00,
+                    'payment_terms' => $validated['payment_terms'] ?? null,
+                    'notes' => $validated['contract_notes'] ?? null,
+                    'status' => 'active',
+                    'created_by' => auth()->id(),
+                ]);
+            }
 
             DB::commit();
 
@@ -261,8 +314,26 @@ class ProviderController extends Controller
      */
     public function show($id)
     {
-        $providerProfile = ServiceProvider::with(['user', 'city', 'services.category', 'documents'])->findOrFail($id);
+        $providerProfile = ServiceProvider::with(['user', 'city', 'services.category', 'documents', 'contracts' => function($q) {
+            $q->latest();
+        }])->findOrFail($id);
         $provider = $providerProfile->user;
+
+        // Get active contract
+        $activeContract = $providerProfile->contracts->where('status', 'active')->first();
+        $allContracts = $providerProfile->contracts->map(function($contract) {
+            return [
+                'id' => $contract->id,
+                'contract_number' => $contract->contract_number,
+                'start_date' => $contract->start_date->format('Y-m-d'),
+                'end_date' => $contract->end_date?->format('Y-m-d'),
+                'commission_rate' => $contract->commission_rate,
+                'payment_terms' => $contract->payment_terms,
+                'notes' => $contract->notes,
+                'status' => $contract->status,
+                'created_at' => $contract->created_at,
+            ];
+        })->toArray();
 
         // Get provider statistics
         $totalBookings = Booking::where('provider_id', $id)->count();
@@ -310,6 +381,16 @@ class ProviderController extends Controller
                 'name_ar' => $providerProfile->city->name_ar ?? '',
             ] : null,
             'documents' => $providerProfile->documents ?? [],
+            'contract' => $activeContract ? [
+                'contract_number' => $activeContract->contract_number,
+                'start_date' => $activeContract->start_date->format('Y-m-d'),
+                'end_date' => $activeContract->end_date?->format('Y-m-d'),
+                'commission_rate' => $activeContract->commission_rate,
+                'payment_terms' => $activeContract->payment_terms,
+                'notes' => $activeContract->notes,
+                'status' => $activeContract->status,
+            ] : null,
+            'all_contracts' => $allContracts,
             'total_bookings' => $totalBookings,
             'completed_bookings' => $completedBookings,
             'cancelled_bookings' => $cancelledBookings,
@@ -752,6 +833,113 @@ class ProviderController extends Controller
                 'message' => 'Failed to verify document: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Export providers to CSV/Excel
+     */
+    public function export(Request $request)
+    {
+        $format = $request->input('format', 'csv');
+        $search = $request->input('search');
+        $status = $request->input('status');
+        $businessType = $request->input('business_type');
+        $cityId = $request->input('city_id');
+
+        $query = ServiceProvider::with(['user', 'city'])
+            ->withCount(['bookings as total_bookings'])
+            ->withSum(['bookings as total_revenue' => function ($query) {
+                $query->where('status', 'completed');
+            }], 'total_amount');
+
+        // Apply same filters as index
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('business_name', 'LIKE', "%{$search}%")
+                  ->orWhereHas('user', function ($q) use ($search) {
+                      $q->where('name', 'LIKE', "%{$search}%")
+                        ->orWhere('email', 'LIKE', "%{$search}%")
+                        ->orWhere('phone', 'LIKE', "%{$search}%");
+                  });
+            });
+        }
+
+        if ($status) {
+            if ($status === 'active') {
+                $query->where('is_active', true);
+            } elseif ($status === 'inactive') {
+                $query->where('is_active', false);
+            }
+        }
+
+        if ($businessType) {
+            $query->where('business_type', $businessType);
+        }
+
+        if ($cityId) {
+            $query->where('city_id', $cityId);
+        }
+
+        $providers = $query->get();
+
+        if ($format === 'csv') {
+            $filename = 'providers-' . date('Y-m-d-His') . '.csv';
+            $headers = [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                'Pragma' => 'no-cache',
+                'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
+                'Expires' => '0',
+            ];
+
+            $callback = function () use ($providers) {
+                $file = fopen('php://output', 'w');
+                // Add BOM for UTF-8
+                fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+                
+                // Headers
+                fputcsv($file, [
+                    'ID',
+                    'Name',
+                    'Email',
+                    'Phone',
+                    'Business Name',
+                    'Business Type',
+                    'Status',
+                    'Verification Status',
+                    'City',
+                    'Rating',
+                    'Total Bookings',
+                    'Total Revenue (SAR)',
+                    'Joined Date',
+                ]);
+
+                foreach ($providers as $provider) {
+                    $user = $provider->user;
+                    fputcsv($file, [
+                        $provider->id,
+                        $user->name ?? 'N/A',
+                        $user->email ?? 'N/A',
+                        $user->phone ?? 'N/A',
+                        $provider->business_name ?? '',
+                        ucfirst(str_replace('_', ' ', $provider->business_type ?? 'individual')),
+                        $provider->is_active ? 'Active' : 'Inactive',
+                        ucfirst($provider->verification_status ?? 'pending'),
+                        $provider->city ? (app()->getLocale() === 'ar' ? $provider->city->name_ar : $provider->city->name_en) : 'N/A',
+                        number_format($provider->average_rating ?? 0, 2),
+                        $provider->total_bookings ?? 0,
+                        number_format($provider->total_revenue ?? 0, 2),
+                        $provider->created_at ? $provider->created_at->format('Y-m-d H:i:s') : '',
+                    ]);
+                }
+                fclose($file);
+            };
+
+            return response()->stream($callback, 200, $headers);
+        }
+
+        // For now, only CSV is supported
+        return redirect()->back()->with('error', 'Unsupported export format');
     }
 
     /**

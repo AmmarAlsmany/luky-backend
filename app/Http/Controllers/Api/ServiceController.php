@@ -105,7 +105,7 @@ class ServiceController extends Controller
     /**
      * Get single provider details
      */
-    public function providerDetails(int $id): JsonResponse
+    public function providerDetails(string $id): JsonResponse
     {
         $provider = ServiceProvider::with([
             'user',
@@ -118,7 +118,7 @@ class ServiceController extends Controller
         ])
             ->approved()
             ->active()
-            ->findOrFail($id);
+            ->findOrFail((int)$id);
 
         return response()->json([
             'success' => true,

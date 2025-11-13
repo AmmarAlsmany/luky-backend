@@ -72,6 +72,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/provider/list', [ProviderController::class, 'index'])->name('providers.index');
         Route::get('/provider/pending', [ProviderController::class, 'pending'])->name('providers.pending');
         Route::get('/provider/details/{id}', [ProviderController::class, 'show'])->name('providers.show');
+        Route::get('/provider/export', [ProviderController::class, 'export'])->name('providers.export');
     });
     
     Route::get('/provider/create', [ProviderController::class, 'create'])->name('providers.create')->middleware('permission:create_providers');
@@ -206,6 +207,17 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/customerservices/chat/create', [CustomerServiceController::class, 'createConversation'])->name('customerservices.createConversation')->middleware('permission:view_chat');
     
     Route::get('/customerservices/stats', [CustomerServiceController::class, 'stats'])->name('customerservices.stats')->middleware('permission:view_tickets');
+
+    // Static Pages (Content Management) routes
+    Route::middleware(['permission:manage_general_settings'])->group(function () {
+        Route::get('/content/pages', [\App\Http\Controllers\StaticPagesController::class, 'index'])->name('static-pages.index');
+        Route::get('/content/pages/create', [\App\Http\Controllers\StaticPagesController::class, 'create'])->name('static-pages.create');
+        Route::post('/content/pages', [\App\Http\Controllers\StaticPagesController::class, 'store'])->name('static-pages.store');
+        Route::get('/content/pages/{id}/edit', [\App\Http\Controllers\StaticPagesController::class, 'edit'])->name('static-pages.edit');
+        Route::put('/content/pages/{id}', [\App\Http\Controllers\StaticPagesController::class, 'update'])->name('static-pages.update');
+        Route::post('/content/pages/{id}/toggle-status', [\App\Http\Controllers\StaticPagesController::class, 'toggleStatus'])->name('static-pages.toggleStatus');
+        Route::delete('/content/pages/{id}', [\App\Http\Controllers\StaticPagesController::class, 'destroy'])->name('static-pages.destroy');
+    });
 
     // Debug route - assign admin role
     Route::get('/debug/assign-admin', function() {

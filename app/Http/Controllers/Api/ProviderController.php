@@ -105,8 +105,8 @@ class ProviderController extends Controller
             'description' => 'required|string|max:1000',
             'city_id' => 'required|exists:cities,id',
             'address' => 'required|string|max:500',
-            'latitude' => 'required|numeric|between:-90,90',
-            'longitude' => 'required|numeric|between:-180,180',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
             'working_hours' => 'required|array',
             'off_days' => 'nullable|array',
         ]);

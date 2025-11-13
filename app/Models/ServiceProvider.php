@@ -86,6 +86,14 @@ class ServiceProvider extends Model implements HasMedia
     }
 
     /**
+     * Get contracts for this provider
+     */
+    public function contracts()
+    {
+        return $this->hasMany(ProviderContract::class, 'provider_id');
+    }
+
+    /**
      * Get conversations for this provider
      */
     public function conversations()

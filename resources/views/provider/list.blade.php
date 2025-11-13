@@ -171,6 +171,21 @@
 
                     <div class="d-flex gap-2 align-items-center">
                         <span class="text-muted">{{ __('common.total') }}: {{ $pagination['total'] ?? 0 }} {{ __('common.providers') }}</span>
+                        
+                        <!-- Export Dropdown -->
+                        <div class="dropdown">
+                            <button class="btn btn-success btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bx bx-download me-1"></i>{{ __('common.export') }}
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li>
+                                    <a class="dropdown-item" href="{{ route('providers.export', array_merge(request()->all(), ['format' => 'csv'])) }}">
+                                        <i class="bx bx-file me-1"></i>{{ __('common.export') }} CSV
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                        
                         <a href="{{ route('providers.create') }}" class="btn btn-primary btn-sm">
                             <i class="bx bx-plus me-1"></i>{{ __('providers.add_provider') }}
                         </a>
@@ -189,6 +204,7 @@
                                 </th>
                                 <th>{{ __('common.name') }}</th>
                                 <th>{{ __('common.status') }}</th>
+                                <th>{{ __('providers.contract') }}</th>
                                 <th>{{ __('common.contact') }}</th>
                                 <th>{{ __('common.city') }}</th>
                                 <th>{{ __('providers.location') }}</th>
@@ -222,6 +238,23 @@
                                         <span class="badge bg-danger-subtle text-danger py-1 px-2">{{ __('common.inactive') }}</span>
                                     @else
                                         <span class="badge bg-primary-subtle text-primary py-1 px-2">{{ __('common.pending') }}</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if(!empty($provider['contract']))
+                                        <div class="d-flex flex-column">
+                                            <span class="fw-semibold text-primary">{{ $provider['contract']['contract_number'] }}</span>
+                                            <small class="text-muted">
+                                                {{ date('M d, Y', strtotime($provider['contract']['start_date'])) }}
+                                                @if($provider['contract']['end_date'])
+                                                    - {{ date('M d, Y', strtotime($provider['contract']['end_date'])) }}
+                                                @else
+                                                    <span class="badge bg-info-subtle text-info">{{ __('providers.ongoing') }}</span>
+                                                @endif
+                                            </small>
+                                        </div>
+                                    @else
+                                        <span class="badge bg-warning-subtle text-warning">{{ __('providers.no_contract') }}</span>
                                     @endif
                                 </td>
                                 <td><span class="fw-semibold">{{ $provider['phone'] ?? 'N/A' }}</span></td>
@@ -295,7 +328,7 @@
                             </tr>
                             @empty
                             <tr>
-                                <td colspan="8" class="text-center py-4">
+                                <td colspan="9" class="text-center py-4">
                                     <div class="text-muted">
                                         <iconify-icon icon="solar:inbox-line-broken" class="fs-48 mb-2"></iconify-icon>
                                         <p>{{ __('providers.no_providers') }}</p>

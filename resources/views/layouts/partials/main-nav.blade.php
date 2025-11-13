@@ -217,14 +217,27 @@
             </li>
             @endcanany
 
+            @can('manage_static_pages')
             <li class="nav-item">
-                <a class="nav-link" href="{{ route('second', ['banners', 'banners'])}}">
+                <a class="nav-link menu-arrow" href="#sidebarContent" data-bs-toggle="collapse" role="button"
+                   aria-expanded="false" aria-controls="sidebarContent">
                      <span class="nav-icon">
-                          <iconify-icon icon="solar:album-bold-duotone"></iconify-icon>
+                          <iconify-icon icon="solar:document-text-bold-duotone"></iconify-icon>
                      </span>
-                    <span class="nav-text"> {{ __('common.banners') }} </span>
+                    <span class="nav-text"> {{ __('common.content_management') }} </span>
                 </a>
+                <div class="collapse" id="sidebarContent">
+                    <ul class="nav sub-navbar-nav">
+                        <li class="sub-nav-item">
+                            <a class="sub-nav-link" href="{{ route('static-pages.index') }}">{{ __('common.static_pages') }}</a>
+                        </li>
+                        <li class="sub-nav-item">
+                            <a class="sub-nav-link" href="{{ route('second', ['banners', 'banners'])}}">{{ __('common.banners') }}</a>
+                        </li>
+                    </ul>
+                </div>
             </li>
+            @endcan
 
             <li class="nav-item">
                 <a class="nav-link" href="{{ route('second', ['reports', 'reports'])}}">

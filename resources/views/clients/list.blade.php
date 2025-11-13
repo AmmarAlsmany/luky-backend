@@ -499,8 +499,8 @@
                                 <div class="invalid-feedback"></div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">{{ __('common.email') }} <span class="text-danger">*</span></label>
-                                <input type="email" class="form-control" name="email" required placeholder="{{ __('common.enter_email') }}">
+                                <label class="form-label">{{ __('common.email') }}</label>
+                                <input type="email" class="form-control" name="email" placeholder="{{ __('common.enter_email') }}">
                                 <div class="invalid-feedback"></div>
                             </div>
                             <div class="col-md-6">
@@ -521,12 +521,18 @@
                                 <div class="invalid-feedback"></div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">{{ __('common.gender') }}</label>
-                                <select class="form-select" name="gender">
+                                <label class="form-label">{{ __('common.gender') }} <span class="text-danger">*</span></label>
+                                <select class="form-select" name="gender" required>
                                     <option value="">{{ __('common.select_gender') }}</option>
                                     <option value="male">{{ __('common.male') }}</option>
                                     <option value="female">{{ __('common.female') }}</option>
                                 </select>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">{{ __('common.date_of_birth') }} <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" name="date_of_birth" required placeholder="{{ __('common.select_date') }}">
+                                <div class="invalid-feedback"></div>
                             </div>
                         </div>
                     </div>

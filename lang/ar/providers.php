@@ -87,6 +87,21 @@ return [
     'create_provider' => 'إنشاء مقدم خدمة',
     'phone_otp_hint' => 'سيستخدم مقدم الخدمة هذا الرقم لتسجيل الدخول عبر OTP',
     
+    // Contract
+    'contract_details' => 'تفاصيل العقد',
+    'contract' => 'العقد',
+    'contract_number' => 'رقم العقد',
+    'contract_start_date' => 'تاريخ بداية العقد',
+    'contract_end_date' => 'تاريخ نهاية العقد',
+    'contract_end_date_hint' => 'اتركه فارغًا للعقود المفتوحة',
+    'payment_terms' => 'شروط الدفع',
+    'payment_terms_placeholder' => 'مثال: دفعة شهرية في اليوم الأول من كل شهر',
+    'contract_notes' => 'ملاحظات العقد',
+    'contract_notes_placeholder' => 'ملاحظات إضافية أو شروط خاصة',
+    'ongoing' => 'مستمر',
+    'no_contract' => 'لا يوجد عقد',
+    'contract_status' => 'حالة العقد',
+    
     // Details Page
     'send_message' => 'إرسال رسالة',
     'quick_note' => 'ملاحظة سريعة لمقدم الخدمة',
@@ -234,4 +249,13 @@ return [
     'view_document' => 'عرض',
     'document_number' => 'مستند :number',
     'unknown' => 'غير معروف',
+    
+    // Document Upload
+    'upload_documents_hint' => 'رفع المستندات المطلوبة للتحقق من مقدم الخدمة (PDF, JPG, PNG - بحد أقصى 5 ميجابايت لكل ملف)',
+    'freelance_license' => 'ترخيص العمل الحر',
+    'commercial_register' => 'السجل التجاري',
+    'municipal_license' => 'الترخيص البلدي',
+    'national_id' => 'الهوية الوطنية',
+    'agreement_contract' => 'عقد الاتفاقية',
+    'file_format_hint' => 'الصيغ المقبولة: PDF، JPG، PNG (بحد أقصى: 5 ميجابايت)',
 ];

@@ -83,17 +83,10 @@
                                 <label for="business_type" class="form-label">{{ __('providers.business_type') }} <span class="text-danger">*</span></label>
                                 <select class="form-select" id="business_type" name="business_type" required>
                                     <option value="">{{ __('providers.select_type') }}</option>
-                                    <optgroup label="{{ __('providers.business_structure') }}">
-                                        <option value="individual" {{ old('business_type') === 'individual' ? 'selected' : '' }}>{{ __('providers.individual') }}</option>
-                                        <option value="company" {{ old('business_type') === 'company' ? 'selected' : '' }}>{{ __('providers.company') }}</option>
-                                        <option value="establishment" {{ old('business_type') === 'establishment' ? 'selected' : '' }}>{{ __('providers.establishment') }}</option>
-                                    </optgroup>
-                                    <optgroup label="{{ __('providers.service_category') }}">
-                                        <option value="salon" {{ old('business_type') === 'salon' ? 'selected' : '' }}>{{ __('providers.salon') }}</option>
-                                        <option value="clinic" {{ old('business_type') === 'clinic' ? 'selected' : '' }}>{{ __('providers.clinic') }}</option>
-                                        <option value="makeup_artist" {{ old('business_type') === 'makeup_artist' ? 'selected' : '' }}>{{ __('providers.makeup_artist') }}</option>
-                                        <option value="hair_stylist" {{ old('business_type') === 'hair_stylist' ? 'selected' : '' }}>{{ __('providers.hair_stylist') }}</option>
-                                    </optgroup>
+                                    <option value="salon" {{ old('business_type') === 'salon' ? 'selected' : '' }}>{{ __('providers.salon') }}</option>
+                                    <option value="clinic" {{ old('business_type') === 'clinic' ? 'selected' : '' }}>{{ __('providers.clinic') }}</option>
+                                    <option value="makeup_artist" {{ old('business_type') === 'makeup_artist' ? 'selected' : '' }}>{{ __('providers.makeup_artist') }}</option>
+                                    <option value="hair_stylist" {{ old('business_type') === 'hair_stylist' ? 'selected' : '' }}>{{ __('providers.hair_stylist') }}</option>
                                 </select>
                             </div>
 
@@ -135,6 +128,36 @@
                             <div class="mb-3">
                                 <label for="description" class="form-label">{{ __('common.description') }}</label>
                                 <textarea class="form-control" id="description" name="description" rows="3">{{ old('description') }}</textarea>
+                            </div>
+
+                            <!-- Contract Details -->
+                            <h5 class="mb-3 mt-4">
+                                <i class="bx bx-file-blank me-2"></i>{{ __('providers.contract_details') }}
+                            </h5>
+
+                            <div class="mb-3">
+                                <label for="contract_start_date" class="form-label">{{ __('providers.contract_start_date') }} <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="contract_start_date" name="contract_start_date" 
+                                       value="{{ old('contract_start_date') }}" required>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="contract_end_date" class="form-label">{{ __('providers.contract_end_date') }}</label>
+                                <input type="date" class="form-control" id="contract_end_date" name="contract_end_date" 
+                                       value="{{ old('contract_end_date') }}">
+                                <small class="text-muted">{{ __('providers.contract_end_date_hint') }}</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="payment_terms" class="form-label">{{ __('providers.payment_terms') }}</label>
+                                <textarea class="form-control" id="payment_terms" name="payment_terms" rows="2" 
+                                          placeholder="{{ __('providers.payment_terms_placeholder') }}">{{ old('payment_terms') }}</textarea>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="contract_notes" class="form-label">{{ __('providers.contract_notes') }}</label>
+                                <textarea class="form-control" id="contract_notes" name="contract_notes" rows="2" 
+                                          placeholder="{{ __('providers.contract_notes_placeholder') }}">{{ old('contract_notes') }}</textarea>
                             </div>
                         </div>
 
@@ -208,6 +231,67 @@
                                     </div>
                                 </div>
                                 <small class="text-muted">{{ __('providers.off_days_hint') }}</small>
+                            </div>
+                        </div>
+
+                        <!-- Provider Documents -->
+                        <div class="col-12">
+                            <hr class="my-4">
+                            <h5 class="mb-3">
+                                <i class="bx bx-file me-2"></i>{{ __('providers.provider_documents') }}
+                            </h5>
+                            <p class="text-muted">{{ __('providers.upload_documents_hint') }}</p>
+
+                            <div class="row">
+                                <!-- Freelance License -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="freelance_license" class="form-label">
+                                        <i class="bx bx-file-blank me-1"></i>{{ __('providers.freelance_license') }}
+                                    </label>
+                                    <input type="file" class="form-control" id="freelance_license" 
+                                           name="documents[freelance_license]" accept=".pdf,.jpg,.jpeg,.png">
+                                    <small class="text-muted">{{ __('providers.file_format_hint') }}</small>
+                                </div>
+
+                                <!-- Commercial Register -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="commercial_register" class="form-label">
+                                        <i class="bx bx-file-blank me-1"></i>{{ __('providers.commercial_register') }}
+                                    </label>
+                                    <input type="file" class="form-control" id="commercial_register" 
+                                           name="documents[commercial_register]" accept=".pdf,.jpg,.jpeg,.png">
+                                    <small class="text-muted">{{ __('providers.file_format_hint') }}</small>
+                                </div>
+
+                                <!-- Municipal License -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="municipal_license" class="form-label">
+                                        <i class="bx bx-file-blank me-1"></i>{{ __('providers.municipal_license') }}
+                                    </label>
+                                    <input type="file" class="form-control" id="municipal_license" 
+                                           name="documents[municipal_license]" accept=".pdf,.jpg,.jpeg,.png">
+                                    <small class="text-muted">{{ __('providers.file_format_hint') }}</small>
+                                </div>
+
+                                <!-- National ID -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="national_id" class="form-label">
+                                        <i class="bx bx-file-blank me-1"></i>{{ __('providers.national_id') }}
+                                    </label>
+                                    <input type="file" class="form-control" id="national_id" 
+                                           name="documents[national_id]" accept=".pdf,.jpg,.jpeg,.png">
+                                    <small class="text-muted">{{ __('providers.file_format_hint') }}</small>
+                                </div>
+
+                                <!-- Agreement Contract -->
+                                <div class="col-md-6 mb-3">
+                                    <label for="agreement_contract" class="form-label">
+                                        <i class="bx bx-file-blank me-1"></i>{{ __('providers.agreement_contract') }}
+                                    </label>
+                                    <input type="file" class="form-control" id="agreement_contract" 
+                                           name="documents[agreement_contract]" accept=".pdf,.jpg,.jpeg,.png">
+                                    <small class="text-muted">{{ __('providers.file_format_hint') }}</small>
+                                </div>
                             </div>
                         </div>
                     </div>
