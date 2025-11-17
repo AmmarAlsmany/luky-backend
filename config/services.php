@@ -59,8 +59,6 @@ return [
     'myfatoorah' => [
         'api_key' => env('MYFATOORAH_API_KEY'),
         'api_url' => env('MYFATOORAH_API_URL', 'https://apitest.myfatoorah.com'),
-        'success_url' => env('MYFATOORAH_SUCCESS_URL'),
-        'error_url' => env('MYFATOORAH_ERROR_URL'),
         'webhook_secret' => env('MYFATOORAH_WEBHOOK_SECRET'),
     ],
 

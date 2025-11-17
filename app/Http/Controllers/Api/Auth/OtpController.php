@@ -42,6 +42,9 @@ class OtpController extends Controller
         $phone = $this->phoneService->normalize($request->phone);
         $type = $request->type;
 
+        // Get app type from header (provider or client)
+        $appType = $request->header('X-App-Type');
+
         // Check if user exists for login type
         if ($type === 'login') {
             $user = User::where('phone', $phone)->first();
@@ -50,13 +53,23 @@ class OtpController extends Controller
                     'phone' => ['No account found with this phone number.']
                 ]);
             }
-            
+
+            // CRITICAL: Validate app type matches user type
+            if ($appType && $user->user_type !== $appType) {
+                $correctApp = $user->user_type === 'provider' ? 'Provider' : 'Client';
+                $currentApp = $appType === 'provider' ? 'Provider' : 'Client';
+
+                throw ValidationException::withMessages([
+                    'phone' => ["This account is registered for {$correctApp}s. Please use the Luky {$correctApp} app instead of the {$currentApp} app."]
+                ]);
+            }
+
             // Check both is_active flag and status field
             if (!$user->is_active || $user->status !== 'active') {
-                $statusMessage = !$user->is_active 
+                $statusMessage = !$user->is_active
                     ? 'Your account has been deactivated. Please contact support.'
                     : 'Your account has been ' . $user->status . '. Please contact support.';
-                    
+
                 throw ValidationException::withMessages([
                     'phone' => [$statusMessage]
                 ]);
@@ -148,6 +161,9 @@ class OtpController extends Controller
         $otpCode = $request->otp_code;
         $type = $request->type;
 
+        // Get app type from header (provider or client)
+        $appType = $request->header('X-App-Type');
+
         // Find OTP verification record
         $otpVerification = OtpVerification::where('phone', $phone)
             ->where('otp_code', $otpCode)
@@ -195,23 +211,33 @@ class OtpController extends Controller
         // For login, return user and token immediately
         if ($type === 'login') {
             $user = User::where('phone', $phone)->first();
-            
+
+            // CRITICAL: Double-check app type matches user type (second layer of validation)
+            if ($appType && $user->user_type !== $appType) {
+                $correctApp = $user->user_type === 'provider' ? 'Provider' : 'Client';
+                $currentApp = $appType === 'provider' ? 'Provider' : 'Client';
+
+                throw ValidationException::withMessages([
+                    'phone' => ["This account is registered for {$correctApp}s. Please use the Luky {$correctApp} app instead of the {$currentApp} app."]
+                ]);
+            }
+
             // Double-check user is still active (in case status changed during OTP flow)
             if (!$user->is_active || $user->status !== 'active') {
-                $statusMessage = !$user->is_active 
+                $statusMessage = !$user->is_active
                     ? 'Your account has been deactivated. Please contact support.'
                     : 'Your account has been ' . $user->status . '. Please contact support.';
-                    
+
                 throw ValidationException::withMessages([
                     'phone' => [$statusMessage]
                 ]);
             }
-            
+
             $user->update(['last_login_at' => now()]);
-            
+
             // Create API token
             $token = $user->createToken('mobile-app', ['*'], now()->addDays(30))->plainTextToken;
-            
+
             $response['data']['user'] = new UserResource($user);
             $response['data']['token'] = $token;
             $response['data']['token_type'] = 'Bearer';

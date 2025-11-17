@@ -54,8 +54,8 @@ Route::prefix('v1')->group(function () {
     Route::get('/pages/{slug}', [App\Http\Controllers\Api\Admin\StaticPagesController::class, 'getBySlug']);
 });
 
-// Protected routes - Requires authentication and active status
-Route::prefix('v1')->middleware(['auth:sanctum', 'active'])->group(function () {
+// Protected routes - Requires authentication, active status, and correct app type
+Route::prefix('v1')->middleware(['auth:sanctum', 'active', 'validate.app.type'])->group(function () {
 
     // User Profile Management
     Route::get('/user/profile', [AuthController::class, 'profile']);
@@ -123,6 +123,7 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active'])->group(function () {
     Route::middleware(['role:client'])->group(function () {
         Route::get('/payments/methods', [PaymentController::class, 'getPaymentMethods']);
         Route::post('/payments/initiate', [PaymentController::class, 'initiatePayment'])->middleware('throttle:10,1');
+        Route::post('/payments/wallet', [PaymentController::class, 'payWithWallet'])->middleware('throttle:10,1');
     });
 
     // Notification routes (all authenticated users)
@@ -177,9 +178,7 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/favorites/toggle', [App\Http\Controllers\Api\FavoritesController::class, 'toggle']);
 });
 
-// Payment callbacks and webhook (no auth - MyFatoorah redirects/calls these)
-Route::get('/v1/payments/callback/success', [PaymentController::class, 'paymentCallback']);
-Route::get('/v1/payments/callback/error', [PaymentController::class, 'paymentCallback']);
+// Payment webhook (no auth - MyFatoorah calls this endpoint server-to-server)
 Route::post('/v1/payments/webhook', [PaymentController::class, 'webhook']);
 
 // ============================================

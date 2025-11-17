@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'active' => \App\Http\Middleware\CheckUserIsActive::class,
             'check_permission' => \App\Http\Middleware\CheckPermission::class,
             'preventback' => \App\Http\Middleware\PreventBackHistory::class,
+            'validate.app.type' => \App\Http\Middleware\ValidateAppType::class,
         ]);
 
         // Add SetLocale middleware to web group

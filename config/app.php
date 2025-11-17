@@ -123,4 +123,17 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Payment Timeout
+    |--------------------------------------------------------------------------
+    |
+    | This value determines the timeout in minutes for payment processing.
+    | If a booking is confirmed but payment is not completed within this
+    | timeframe, the booking will be automatically cancelled.
+    |
+    */
+
+    'payment_timeout_minutes' => env('PAYMENT_TIMEOUT_MINUTES', 5),
+
 ];

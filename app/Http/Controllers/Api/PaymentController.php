@@ -207,8 +207,6 @@ class PaymentController extends Controller
                     'payment_id' => $payment->id,
                     'payment_url' => $paymentData['PaymentURL'],
                     'invoice_id' => $paymentData['InvoiceId'],
-                    'success_url' => 'callback/success',
-                    'error_url' => 'callback/error',
                 ]
             ]);
 
@@ -230,276 +228,51 @@ class PaymentController extends Controller
     }
 
     /**
-     * Payment callback - Handles both success and error redirects from MyFatoorah
-     */
-    public function paymentCallback(Request $request)
-    {
-        // Log all callback details
-        Log::info('=== PAYMENT CALLBACK RECEIVED ===', [
-            'url' => $request->fullUrl(),
-            'method' => $request->method(),
-            'all_params' => $request->all(),
-            'is_error_callback' => $request->is('*/callback/error'),
-            'is_success_callback' => $request->is('*/callback/success'),
-        ]);
-
-        $paymentId = $request->get('paymentId');
-        $isErrorCallback = $request->is('*/callback/error');
-
-        if (!$paymentId) {
-            Log::error('Payment callback missing payment ID');
-            return $this->renderCallbackPage(false, 'Payment ID not provided');
-        }
-
-        Log::info('Fetching payment status from MyFatoorah', ['payment_id' => $paymentId]);
-
-        // Get payment status from MyFatoorah
-        $result = $this->myFatoorah->getPaymentStatus($paymentId);
-
-        Log::info('MyFatoorah payment status response', [
-            'success' => $result['success'],
-            'data' => $result['data'] ?? null,
-            'message' => $result['message'] ?? null,
-        ]);
-
-        if (!$result['success']) {
-            return $this->renderCallbackPage(false, 'Failed to verify payment status');
-        }
-
-        $paymentData = $result['data']['Data'];
-        $invoiceStatus = $paymentData['InvoiceStatus'];
-
-        Log::info('Payment invoice status', [
-            'invoice_status' => $invoiceStatus,
-            'invoice_error' => $paymentData['InvoiceError'] ?? null,
-            'payment_gateway' => $paymentData['PaymentGateway'] ?? null,
-        ]);
-
-        // Find payment record
-        $payment = Payment::where('payment_id', $paymentId)->first();
-
-        if (!$payment) {
-            Log::error('Payment record not found in database', ['payment_id' => $paymentId]);
-            return $this->renderCallbackPage(false, 'Payment record not found');
-        }
-
-        Log::info('Payment record found', [
-            'payment_db_id' => $payment->id,
-            'booking_id' => $payment->booking_id,
-            'current_status' => $payment->status,
-        ]);
-
-        DB::beginTransaction();
-        try {
-            if ($invoiceStatus === 'Paid') {
-                // Payment successful
-                Log::info('Processing successful payment', ['payment_id' => $paymentId]);
-
-                $payment->update([
-                    'status' => 'completed',
-                    'gateway_response' => $result['data'],
-                    'paid_at' => now(),
-                ]);
-
-                // Update booking
-                $payment->booking->update([
-                    'payment_status' => 'paid',
-                    'payment_method' => $paymentData['PaymentGateway'] ?? 'myfatoorah',
-                ]);
-
-                DB::commit();
-
-                Log::info('=== PAYMENT COMPLETED SUCCESSFULLY ===', [
-                    'payment_id' => $paymentId,
-                    'booking_id' => $payment->booking_id,
-                ]);
-
-                return $this->renderCallbackPage(true, 'Payment completed successfully', [
-                    'booking_id' => $payment->booking_id,
-                    'amount' => $payment->amount,
-                ]);
-
-            } else {
-                // Payment failed
-                Log::warning('Processing failed payment', [
-                    'payment_id' => $paymentId,
-                    'invoice_status' => $invoiceStatus,
-                    'invoice_error' => $paymentData['InvoiceError'] ?? 'No error message',
-                ]);
-
-                $payment->update([
-                    'status' => 'failed',
-                    'failure_reason' => $paymentData['InvoiceError'] ?? 'Payment failed',
-                    'gateway_response' => $result['data'],
-                ]);
-
-                $payment->booking->update([
-                    'payment_status' => 'failed',
-                ]);
-
-                DB::commit();
-
-                Log::info('=== PAYMENT FAILED ===', [
-                    'payment_id' => $paymentId,
-                    'reason' => $paymentData['InvoiceError'] ?? 'Unknown',
-                ]);
-
-                return $this->renderCallbackPage(false, 'Payment failed', [
-                    'reason' => $paymentData['InvoiceError'] ?? 'Unknown error'
-                ]);
-            }
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            Log::error('=== PAYMENT CALLBACK EXCEPTION ===', [
-                'payment_id' => $paymentId,
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            return $this->renderCallbackPage(false, 'Payment processing failed: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Render HTML callback page that closes the WebView
-     */
-    private function renderCallbackPage(bool $success, string $message, array $data = [])
-    {
-        $title = $success ? 'Payment Successful' : 'Payment Failed';
-        $statusClass = $success ? 'success' : 'error';
-
-        $html = <<<HTML
-<!DOCTYPE html>
-<html lang="ar">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{$title}</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .container {
-            background: white;
-            padding: 40px;
-            border-radius: 15px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            text-align: center;
-            max-width: 400px;
-        }
-        .success {
-            color: #10b981;
-        }
-        .error {
-            color: #ef4444;
-        }
-        .icon {
-            font-size: 64px;
-            margin-bottom: 20px;
-        }
-        h1 {
-            font-size: 24px;
-            margin-bottom: 10px;
-        }
-        p {
-            color: #6b7280;
-            margin-bottom: 20px;
-        }
-        .message {
-            font-size: 14px;
-            color: #374151;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="icon {$statusClass}">
-            {$this->getIcon($success)}
-        </div>
-        <h1 class="{$statusClass}">{$title}</h1>
-        <p class="message">{$message}</p>
-        <p style="font-size: 12px; color: #9ca3af;">This window will close automatically...</p>
-    </div>
-    <script>
-        // Send message to Flutter WebView
-        if (window.flutter_inappwebview) {
-            window.flutter_inappwebview.callHandler('paymentResult', {
-                success: {$this->boolToJs($success)},
-                message: "{$message}",
-                data: {$this->arrayToJson($data)}
-            });
-        }
-
-        // Try to close the window
-        setTimeout(function() {
-            if (window.flutter_inappwebview) {
-                window.flutter_inappwebview.callHandler('closeWebView');
-            }
-            window.close();
-        }, 2000);
-    </script>
-</body>
-</html>
-HTML;
-
-        return response($html)->header('Content-Type', 'text/html');
-    }
-
-    private function getIcon(bool $success): string
-    {
-        return $success ? '✓' : '✗';
-    }
-
-    private function boolToJs(bool $value): string
-    {
-        return $value ? 'true' : 'false';
-    }
-
-    private function arrayToJson(array $data): string
-    {
-        return json_encode($data);
-    }
-
-    /**
-     * Webhook handler for payment notifications
+     * Webhook handler for payment notifications from MyFatoorah
+     * Documentation: https://docs.myfatoorah.com/docs/webhook
      */
     public function webhook(Request $request): JsonResponse
     {
-        // Verify webhook signature for security
+        Log::info('=== MYFATOORAH WEBHOOK RECEIVED ===', [
+            'ip' => $request->ip(),
+            'headers' => $request->headers->all(),
+            'payload' => $request->all(),
+        ]);
+
+        // Verify webhook signature for security (MyFatoorah V2 Webhook)
         $webhookSecret = config('services.myfatoorah.webhook_secret');
 
         if ($webhookSecret && $webhookSecret !== 'your_webhook_secret') {
-            $signature = $request->header('X-Webhook-Signature');
+            $signature = $request->header('X-Webhook-Signature') ?? $request->header('Signature');
             $payload = $request->getContent();
             $expectedSignature = hash_hmac('sha256', $payload, $webhookSecret);
 
             if (!hash_equals($expectedSignature, $signature ?? '')) {
-                \Log::warning('Invalid webhook signature from MyFatoorah', [
+                Log::warning('Invalid webhook signature from MyFatoorah', [
                     'ip' => $request->ip(),
-                    'signature' => $signature,
+                    'received_signature' => $signature,
+                    'expected_signature' => substr($expectedSignature, 0, 20) . '...',
                 ]);
                 return response()->json(['success' => false, 'message' => 'Invalid signature'], 401);
             }
         }
 
-        $paymentId = $request->get('Data.InvoiceId');
+        // MyFatoorah sends data in various formats depending on webhook version
+        // Try to extract invoice/payment ID from different possible locations
+        $data = $request->all();
+        $paymentId = $data['Data']['InvoiceId']
+                  ?? $data['InvoiceId']
+                  ?? $data['data']['InvoiceId']
+                  ?? null;
 
         if (!$paymentId) {
-            \Log::warning('Webhook received without payment ID', [
-                'data' => $request->all(),
+            Log::warning('Webhook received without payment ID', [
+                'full_payload' => $data,
             ]);
             return response()->json(['success' => false, 'message' => 'Missing payment ID'], 400);
         }
+
+        Log::info('Processing webhook for payment', ['payment_id' => $paymentId]);
 
         // Process payment status update
         try {
@@ -507,13 +280,18 @@ HTML;
 
             if ($result['success']) {
                 $this->processPaymentStatus($result['data']);
+
+                Log::info('=== WEBHOOK PROCESSED SUCCESSFULLY ===', [
+                    'payment_id' => $paymentId,
+                ]);
             }
 
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
-            \Log::error('Webhook processing failed', [
+            Log::error('=== WEBHOOK PROCESSING FAILED ===', [
                 'payment_id' => $paymentId,
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
             return response()->json(['success' => false, 'message' => 'Processing failed'], 500);
         }
@@ -537,26 +315,209 @@ HTML;
     }
 
     /**
+     * Pay with wallet/balance
+     */
+    public function payWithWallet(Request $request): JsonResponse
+    {
+        Log::info('=== WALLET PAYMENT STARTED ===');
+        Log::info('Request data:', $request->all());
+
+        $request->validate([
+            'booking_id' => 'required|exists:bookings,id',
+        ]);
+
+        $user = $request->user();
+        $booking = Booking::with(['client', 'provider'])->findOrFail($request->booking_id);
+
+        Log::info('Booking details:', [
+            'id' => $booking->id,
+            'status' => $booking->status,
+            'payment_status' => $booking->payment_status,
+            'total_amount' => $booking->total_amount,
+        ]);
+
+        // Verify booking belongs to user
+        if ($booking->client_id !== $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized access to booking.'
+            ], 403);
+        }
+
+        // Verify booking status
+        if ($booking->status !== 'confirmed') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking must be confirmed by provider first.'
+            ], 400);
+        }
+
+        if ($booking->payment_status !== 'pending') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment already processed for this booking.'
+            ], 400);
+        }
+
+        // Check if user has sufficient balance (if wallet balance exists)
+        // Note: Add wallet_balance column to users table if not exists
+        $userBalance = $user->wallet_balance ?? 0;
+        if ($userBalance < $booking->total_amount) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Insufficient wallet balance.',
+                'current_balance' => $userBalance,
+                'required_amount' => $booking->total_amount
+            ], 400);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Deduct from wallet
+            $user->decrement('wallet_balance', $booking->total_amount);
+
+            // Create payment record
+            $payment = Payment::create([
+                'booking_id' => $booking->id,
+                'payment_id' => 'WALLET_' . $booking->id . '_' . now()->timestamp,
+                'amount' => $booking->total_amount,
+                'currency' => 'SAR',
+                'gateway' => 'wallet',
+                'method' => 'wallet',
+                'status' => 'completed',
+                'gateway_response' => [
+                    'payment_method' => 'wallet',
+                    'balance_before' => $userBalance,
+                    'balance_after' => $userBalance - $booking->total_amount,
+                ],
+                'paid_at' => now(),
+            ]);
+
+            // Update booking to paid status
+            $booking->update([
+                'payment_status' => 'paid',
+                'payment_method' => 'wallet',
+                'payment_reference' => $payment->payment_id,
+            ]);
+
+            // Mark payment request notification as read so it disappears from notification list
+            \App\Models\Notification::where('user_id', $booking->client_id)
+                ->where('type', 'booking_accepted')
+                ->where('data->booking_id', $booking->id)
+                ->where('is_read', false)
+                ->update(['is_read' => true]);
+
+            Log::info('Payment notification marked as read', [
+                'booking_id' => $booking->id,
+                'client_id' => $booking->client_id,
+            ]);
+
+            DB::commit();
+
+            Log::info('=== WALLET PAYMENT COMPLETED ===', [
+                'booking_id' => $booking->id,
+                'amount' => $booking->total_amount,
+                'new_balance' => $userBalance - $booking->total_amount,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment completed successfully',
+                'data' => [
+                    'booking_id' => $booking->id,
+                    'payment_id' => $payment->id,
+                    'amount_paid' => $booking->total_amount,
+                    'new_balance' => $userBalance - $booking->total_amount,
+                    'payment_status' => 'paid',
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Log::error('=== WALLET PAYMENT EXCEPTION ===', [
+                'booking_id' => $booking->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment processing failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Helper: Process payment status
      */
     protected function processPaymentStatus(array $data)
     {
         $paymentData = $data['Data'];
-        $payment = Payment::where('payment_id', $paymentData['InvoiceId'])->first();
+        $paymentId = $paymentData['InvoiceId'];
+        $payment = Payment::where('payment_id', $paymentId)->first();
 
         if (!$payment) {
+            Log::warning('Payment record not found for webhook processing', [
+                'payment_id' => $paymentId,
+            ]);
             return;
         }
 
-        DB::transaction(function () use ($payment, $paymentData) {
-            if ($paymentData['InvoiceStatus'] === 'Paid') {
+        DB::transaction(function () use ($payment, $paymentData, $data) {
+            $invoiceStatus = $paymentData['InvoiceStatus'];
+
+            if ($invoiceStatus === 'Paid') {
+                Log::info('Processing successful payment from webhook', [
+                    'payment_id' => $paymentData['InvoiceId'],
+                    'booking_id' => $payment->booking_id,
+                ]);
+
                 $payment->update([
                     'status' => 'completed',
+                    'gateway_response' => $data,
                     'paid_at' => now(),
                 ]);
 
                 $payment->booking->update([
                     'payment_status' => 'paid',
+                    'payment_method' => $paymentData['PaymentGateway'] ?? 'myfatoorah',
+                ]);
+
+                // Mark payment request notification as read so it disappears
+                \App\Models\Notification::where('user_id', $payment->booking->client_id)
+                    ->where('type', 'booking_accepted')
+                    ->where('data->booking_id', $payment->booking_id)
+                    ->where('is_read', false)
+                    ->update(['is_read' => true]);
+
+                Log::info('=== PAYMENT COMPLETED SUCCESSFULLY ===', [
+                    'payment_id' => $paymentData['InvoiceId'],
+                    'booking_id' => $payment->booking_id,
+                    'notification_marked_read' => true,
+                ]);
+            } else {
+                // Handle failed payment
+                Log::warning('Processing failed payment from webhook', [
+                    'payment_id' => $paymentData['InvoiceId'],
+                    'invoice_status' => $invoiceStatus,
+                    'invoice_error' => $paymentData['InvoiceError'] ?? 'No error message',
+                ]);
+
+                $payment->update([
+                    'status' => 'failed',
+                    'failure_reason' => $paymentData['InvoiceError'] ?? 'Payment failed',
+                    'gateway_response' => $data,
+                ]);
+
+                $payment->booking->update([
+                    'payment_status' => 'failed',
+                ]);
+
+                Log::info('=== PAYMENT FAILED ===', [
+                    'payment_id' => $paymentData['InvoiceId'],
+                    'reason' => $paymentData['InvoiceError'] ?? 'Unknown',
                 ]);
             }
         });

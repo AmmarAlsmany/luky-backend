@@ -43,6 +43,7 @@ class User extends Authenticatable
         'status',
         'created_by',
         'avatar',
+        'wallet_balance',
     ];
 
     /**

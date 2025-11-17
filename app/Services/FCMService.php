@@ -18,17 +18,32 @@ class FCMService
     {
         $this->credentialsPath = config('services.fcm.credentials_path', env('FCM_CREDENTIALS_PATH'));
         
+        // Handle relative paths from project root
+        if ($this->credentialsPath && !file_exists($this->credentialsPath)) {
+            // Try as relative path from base
+            $absolutePath = base_path($this->credentialsPath);
+            if (file_exists($absolutePath)) {
+                $this->credentialsPath = $absolutePath;
+            }
+        }
+        
         if ($this->credentialsPath && file_exists($this->credentialsPath)) {
             try {
                 $this->messaging = (new Factory)
                     ->withServiceAccount($this->credentialsPath)
                     ->createMessaging();
+                Log::info('Firebase Messaging initialized successfully', [
+                    'credentials_file' => basename($this->credentialsPath)
+                ]);
             } catch (\Exception $e) {
                 Log::error('Failed to initialize Firebase Messaging: ' . $e->getMessage());
                 $this->messaging = null;
             }
         } else {
-            Log::warning('FCM credentials path not configured or file not found');
+            Log::warning('FCM credentials path not configured or file not found', [
+                'path' => $this->credentialsPath,
+                'absolute_path' => $this->credentialsPath ? base_path($this->credentialsPath) : null,
+            ]);
             $this->messaging = null;
         }
     }

@@ -19,23 +19,26 @@ class PaymentObserver
      */
     public function created(Payment $payment): void
     {
-        // Notify admins about new payment
-        $booking = $payment->booking;
-        
-        $this->notificationService->sendToAdmins(
-            'new_payment',
-            'New Payment Received',
-            "Payment of {$payment->amount} {$payment->currency} received for booking #{$booking->booking_number}",
-            [
-                'payment_id' => $payment->id,
-                'booking_id' => $booking->id,
-                'booking_number' => $booking->booking_number,
-                'amount' => $payment->amount,
-                'currency' => $payment->currency,
-                'payment_gateway' => $payment->payment_gateway,
-                'status' => $payment->status,
-            ]
-        );
+        // Only notify admins if payment is already completed (e.g., wallet payments)
+        // For other gateways, notification will be sent when status changes to 'completed'
+        if ($payment->status === 'completed') {
+            $booking = $payment->booking;
+
+            $this->notificationService->sendToAdmins(
+                'new_payment',
+                'New Payment Received',
+                "Payment of {$payment->amount} {$payment->currency} received for booking #{$booking->booking_number}",
+                [
+                    'payment_id' => $payment->id,
+                    'booking_id' => $booking->id,
+                    'booking_number' => $booking->booking_number,
+                    'amount' => $payment->amount,
+                    'currency' => $payment->currency,
+                    'payment_gateway' => $payment->gateway,
+                    'status' => $payment->status,
+                ]
+            );
+        }
     }
 
     /**
