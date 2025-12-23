@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 class ServiceProvider extends Model implements HasMedia
 {
@@ -33,7 +34,11 @@ class ServiceProvider extends Model implements HasMedia
         'latitude',
         'longitude',
         'address',
-        'verified_at'
+        'verified_at',
+        'account_title',
+        'account_number',
+        'iban',
+        'currency'
     ];
 
     protected $casts = [
@@ -156,14 +161,64 @@ class ServiceProvider extends Model implements HasMedia
     }
 
     /**
+     * Register media conversions for automatic image optimization
+     */
+    public function registerMediaConversions(?Media $media = null): void
+    {
+        // Logo - Optimized at 400x400 (perfect for avatars)
+        $this->addMediaConversion('optimized')
+            ->width(400)
+            ->height(400)
+            ->sharpen(10)
+            ->quality(85)
+            ->format('jpg')
+            ->performOnCollections('logo')
+            ->nonQueued();
+
+        // Building image - Max 1200px
+        $this->addMediaConversion('optimized')
+            ->width(1200)
+            ->height(800)
+            ->sharpen(10)
+            ->quality(85)
+            ->format('jpg')
+            ->performOnCollections('building_image')
+            ->nonQueued();
+
+        // Gallery - Optimized version
+        $this->addMediaConversion('optimized')
+            ->width(1200)
+            ->height(1200)
+            ->sharpen(10)
+            ->quality(85)
+            ->format('jpg')
+            ->performOnCollections('gallery')
+            ->nonQueued();
+
+        // Gallery - Thumbnail
+        $this->addMediaConversion('thumb')
+            ->width(400)
+            ->height(400)
+            ->sharpen(10)
+            ->quality(80)
+            ->format('jpg')
+            ->performOnCollections('gallery')
+            ->nonQueued();
+    }
+
+    /**
      * Get logo URL with default business avatar
+     * Returns optimized version for better performance
      */
     public function getLogoUrlAttribute()
     {
         // Check if provider has uploaded logo
         $logo = $this->getFirstMedia('logo');
         if ($logo) {
-            return $logo->getUrl();
+            // Return optimized version if available
+            return $logo->hasGeneratedConversion('optimized')
+                ? $logo->getUrl('optimized')
+                : $logo->getUrl();
         }
 
         // Use default business avatar
@@ -181,5 +236,13 @@ class ServiceProvider extends Model implements HasMedia
         }
 
         return null;
+    }
+
+    /**
+     * Get pending profile changes for this provider
+     */
+    public function pendingChanges()
+    {
+        return $this->hasMany(ProviderPendingChange::class, 'provider_id');
     }
 }

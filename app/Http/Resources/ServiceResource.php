@@ -19,6 +19,7 @@ class ServiceResource extends JsonResource
             'price' => (float) $this->price,
             'price_display' => number_format($this->price, 2) . ' SAR',
             'available_at_home' => $this->available_at_home,
+            'location_type' => $this->available_at_home ? 'both' : 'salon', // For mobile app compatibility
             'home_service_price' => $this->home_service_price ? (float) $this->home_service_price : null,
             'home_service_price_display' => $this->home_service_price ? number_format($this->home_service_price, 2) . ' SAR' : null,
             'duration_minutes' => $this->duration_minutes,

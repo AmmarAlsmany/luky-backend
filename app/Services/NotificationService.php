@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\Notification;
 use App\Models\Booking;
 use App\Models\User;
+use App\Jobs\SendFCMNotificationJob;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class NotificationService
 {
@@ -52,15 +54,17 @@ class NotificationService
                 'is_sent' => false,
             ]);
 
-            // Send push notification
-            $pushSent = $this->fcmService->sendToUser($userId, $title, $body, array_merge($data, [
+            // Dispatch FCM notification job asynchronously (non-blocking)
+            SendFCMNotificationJob::dispatch($userId, $title, $body, array_merge($data, [
                 'notification_id' => $notification->id,
                 'type' => $type,
             ]));
 
-            if ($pushSent) {
-                $notification->markAsSent();
-            }
+            // Mark as sent immediately (job will be processed by queue worker)
+            $notification->markAsSent();
+
+            // Clear unread count cache for this user
+            Cache::forget("user:{$userId}:unread_notifications_count");
 
             return $notification;
         } catch (\Exception $e) {
@@ -447,11 +451,16 @@ class NotificationService
      */
     public function sendProviderApproved(int $userId, string $businessName): void
     {
+        // Bilingual notification
+        $title = 'Congratulations! | مبروك!';
+        $body = "Your business '{$businessName}' has been approved. You can now start receiving bookings!\n" .
+                "تم الموافقة على نشاطك التجاري '{$businessName}'. يمكنك الآن البدء في استقبال الحجوزات!";
+
         $this->send(
             $userId,
             'provider_approved',
-            'Congratulations!',
-            "Your business '{$businessName}' has been approved. You can now start receiving bookings!",
+            $title,
+            $body,
             [
                 'business_name' => $businessName,
             ]
@@ -463,12 +472,18 @@ class NotificationService
      */
     public function sendProviderRejected(int $userId, string $businessName, string $reason = ''): void
     {
+        // Bilingual notification
+        $title = 'Application Status | حالة الطلب';
+        $body = "Your business application '{$businessName}' has been rejected." .
+                ($reason ? " Reason: {$reason}" : '') . "\n" .
+                "تم رفض طلب نشاطك التجاري '{$businessName}'." .
+                ($reason ? " السبب: {$reason}" : '');
+
         $this->send(
             $userId,
             'provider_rejected',
-            'Application Status',
-            "Your business application '{$businessName}' has been rejected." .
-            ($reason ? " Reason: {$reason}" : ''),
+            $title,
+            $body,
             [
                 'business_name' => $businessName,
                 'reason' => $reason,
@@ -549,5 +564,74 @@ class NotificationService
                 'trace' => $e->getTraceAsString(),
             ]);
         }
+    }
+
+    /**
+     * Send notification when provider requests profile change
+     */
+    public function sendProviderChangeRequest(int $providerId, string $businessName, array $changedFields): void
+    {
+        // Bilingual notification to admins
+        $title = 'Profile Change Request | طلب تعديل ملف';
+        $fieldsCount = count($changedFields);
+        $body = "{$businessName} has requested to change {$fieldsCount} field(s) in their profile. Please review.\n" .
+                "طلب {$businessName} تعديل {$fieldsCount} حقل/حقول في ملفه. يرجى المراجعة.";
+
+        $this->sendToAdmins(
+            'profile_change_request',
+            $title,
+            $body,
+            [
+                'provider_id' => $providerId,
+                'business_name' => $businessName,
+                'fields_count' => $fieldsCount,
+                'changed_fields' => array_keys($changedFields),
+            ]
+        );
+    }
+
+    /**
+     * Send notification when admin approves profile change
+     */
+    public function sendProfileChangeApproved(int $userId, string $businessName): void
+    {
+        // Bilingual notification to provider
+        $title = 'Profile Updated | تم تحديث الملف';
+        $body = "Great news! Your profile changes for '{$businessName}' have been approved and applied.\n" .
+                "أخبار رائعة! تم الموافقة على تغييرات ملف '{$businessName}' وتطبيقها.";
+
+        $this->send(
+            $userId,
+            'profile_change_approved',
+            $title,
+            $body,
+            [
+                'business_name' => $businessName,
+            ]
+        );
+    }
+
+    /**
+     * Send notification when admin rejects profile change
+     */
+    public function sendProfileChangeRejected(int $userId, string $businessName, string $reason = ''): void
+    {
+        // Bilingual notification to provider
+        $title = 'Profile Changes Rejected | تم رفض التغييرات';
+        $body = "Your profile changes for '{$businessName}' have been rejected." .
+                ($reason ? " Reason: {$reason}" : '') . "\n" .
+                "تم رفض تغييرات ملف '{$businessName}'." .
+                ($reason ? " السبب: {$reason}" : '');
+
+        $this->send(
+            $userId,
+            'profile_change_rejected',
+            $title,
+            $body,
+            [
+                'business_name' => $businessName,
+                'reason' => $reason,
+            ]
+        );
     }
 }

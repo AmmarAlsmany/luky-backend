@@ -10,13 +10,11 @@ use App\Http\Resources\CityResource;
 class LocationController extends Controller
 {
     /**
-     * Get all active cities
+     * Get all active cities (cached)
      */
     public function cities(Request $request): JsonResponse
     {
-        $cities = City::active()
-            ->orderBy('name_en')
-            ->get();
+        $cities = \App\Services\CacheService::getCities();
 
         return response()->json([
             'success' => true,
@@ -90,7 +88,7 @@ class LocationController extends Controller
                 'otp_expiry_minutes' => 10
             ],
             'payment_settings' => [
-                'payment_timeout_minutes' => (int) \App\Models\AppSetting::get('payment_timeout_minutes', 10),
+                'payment_timeout_minutes' => (int) \App\Services\CacheService::getAppSetting('payment_timeout_minutes', 10),
             ],
             'social_media' => [
                 'instagram' => 'https://instagram.com/luky.sa',
@@ -106,47 +104,38 @@ class LocationController extends Controller
     }
 
     /**
-     * Get banners for home screen
+     * Get banners for home screen (cached for 5 minutes)
      */
     public function banners(): JsonResponse
     {
-        // Get active banners from database
-        $now = now();
+        $banners = \App\Services\CacheService::getHomeBanners();
 
-        $banners = \DB::table('banners')
-            ->where('is_active', true)
-            // Check dates directly instead of relying on status field
-            // This ensures banners are shown/hidden immediately without waiting for cron
-            ->whereDate('start_date', '<=', $now)
-            ->whereDate('end_date', '>=', $now)
-            ->whereIn('display_location', ['home', 'all'])
-            ->orderBy('display_order', 'asc')
-            ->orderBy('created_at', 'desc')
-            ->get()
-            ->map(function ($banner) {
-                return [
-                    'id' => $banner->id,
-                    'title' => $banner->title,
-                    'provider_name' => $banner->provider_name,
-                    'offer_text' => $banner->offer_text,
-                    'image_url' => $banner->image_url ? url('storage/' . $banner->image_url) : null,
-                    'link_url' => $banner->link_url,
-                    'start_date' => $banner->start_date,
-                    'end_date' => $banner->end_date,
-                ];
-            });
+        $bannerData = $banners->map(function ($banner) {
+            return [
+                'id' => $banner->id,
+                'title' => $banner->title,
+                'provider_name' => $banner->provider_name,
+                'offer_text' => $banner->offer_text,
+                'image_url' => $banner->image_url ? url('storage/' . $banner->image_url) : null,
+                'link_url' => $banner->link_url,
+                'start_date' => $banner->start_date,
+                'end_date' => $banner->end_date,
+            ];
+        });
 
-        // Increment impression count for each banner
+        // Increment impression count asynchronously (don't block response)
         if ($banners->isNotEmpty()) {
             $bannerIds = $banners->pluck('id')->toArray();
-            \DB::table('banners')
-                ->whereIn('id', $bannerIds)
-                ->increment('impression_count');
+            dispatch(function () use ($bannerIds) {
+                \DB::table('banners')
+                    ->whereIn('id', $bannerIds)
+                    ->increment('impression_count');
+            })->afterResponse();
         }
 
         return response()->json([
             'success' => true,
-            'data' => $banners,
+            'data' => $bannerData,
             'total' => $banners->count()
         ]);
     }

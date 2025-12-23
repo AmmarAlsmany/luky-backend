@@ -84,6 +84,11 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::delete('/provider/{id}', [ProviderController::class, 'destroy'])->name('providers.destroy')->middleware('permission:delete_providers');
     Route::put('/provider/{providerId}/document/{documentId}/verify', [ProviderController::class, 'verifyDocument'])->name('providers.verifyDocument')->middleware('permission:edit_providers');
 
+    // Provider Profile Change Requests
+    Route::get('/provider/pending-changes', [ProviderController::class, 'pendingChanges'])->name('providers.pendingChanges')->middleware('permission:view_providers');
+    Route::post('/provider/pending-changes/{id}/approve', [ProviderController::class, 'approvePendingChange'])->name('providers.approvePendingChange')->middleware('permission:edit_providers');
+    Route::post('/provider/pending-changes/{id}/reject', [ProviderController::class, 'rejectPendingChange'])->name('providers.rejectPendingChange')->middleware('permission:edit_providers');
+
     // Booking routes
     Route::get('/bookings/list', [BookingController::class, 'index'])->name('bookings.index')->middleware('permission:view_bookings');
     Route::get('/bookings/export', [BookingController::class, 'export'])->name('bookings.export')->middleware('permission:export_bookings');

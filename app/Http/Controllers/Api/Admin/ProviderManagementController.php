@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Booking;
 use App\Models\Service;
 use App\Models\Review;
+use App\Models\ProviderPendingChange;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -686,5 +687,213 @@ class ProviderManagementController extends Controller
             'success' => false,
             'message' => 'Unsupported export format',
         ], 400);
+    }
+
+    /**
+     * Get all pending provider profile changes
+     */
+    public function getPendingChanges(Request $request)
+    {
+        try {
+            $perPage = $request->input('per_page', 20);
+            $providerId = $request->input('provider_id');
+
+            \Log::info('=== FETCHING PENDING CHANGES ===', [
+                'per_page' => $perPage,
+                'provider_id' => $providerId
+            ]);
+
+            $query = ProviderPendingChange::with(['provider.user', 'reviewer'])
+                ->where('status', 'pending')
+                ->orderBy('created_at', 'asc');
+
+            // Filter by specific provider if requested
+            if ($providerId) {
+                $query->where('provider_id', $providerId);
+            }
+
+            $pendingChanges = $query->paginate($perPage);
+
+            \Log::info('=== PENDING CHANGES FETCHED ===', [
+                'count' => $pendingChanges->count()
+            ]);
+
+            $data = $pendingChanges->map(function ($change) {
+                return [
+                    'id' => $change->id,
+                    'provider_id' => $change->provider_id,
+                    'provider_name' => $change->provider && $change->provider->user ? $change->provider->user->name : 'N/A',
+                    'business_name' => $change->provider ? $change->provider->business_name : 'N/A',
+                    'changed_fields' => $change->changed_fields,
+                    'old_values' => $change->old_values,
+                    'status' => $change->status,
+                    'created_at' => $change->created_at,
+                    'updated_at' => $change->updated_at,
+                ];
+            });
+
+            \Log::info('=== DATA MAPPED ===', [
+                'data_count' => $data->count()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+                'pagination' => [
+                    'total' => $pendingChanges->total(),
+                    'per_page' => $pendingChanges->perPage(),
+                    'current_page' => $pendingChanges->currentPage(),
+                    'last_page' => $pendingChanges->lastPage(),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('=== ERROR FETCHING PENDING CHANGES ===', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching pending changes: ' . $e->getMessage(),
+                'data' => []
+            ], 500);
+        }
+    }
+
+    /**
+     * Get details of a specific pending change
+     */
+    public function getPendingChangeDetails($id)
+    {
+        $change = ProviderPendingChange::with(['provider.user', 'provider.city', 'reviewer'])
+            ->findOrFail($id);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'id' => $change->id,
+                'provider' => [
+                    'id' => $change->provider->id,
+                    'name' => $change->provider->user->name ?? 'N/A',
+                    'business_name' => $change->provider->business_name,
+                    'email' => $change->provider->user->email ?? 'N/A',
+                    'phone' => $change->provider->user->phone ?? 'N/A',
+                    'city' => $change->provider->city->name_en ?? 'N/A',
+                ],
+                'changed_fields' => $change->changed_fields,
+                'old_values' => $change->old_values,
+                'status' => $change->status,
+                'reviewed_by' => $change->reviewer->name ?? null,
+                'reviewed_at' => $change->reviewed_at,
+                'rejection_reason' => $change->rejection_reason,
+                'admin_notes' => $change->admin_notes,
+                'created_at' => $change->created_at,
+                'updated_at' => $change->updated_at,
+            ]
+        ]);
+    }
+
+    /**
+     * Approve pending provider profile changes
+     */
+    public function approvePendingChange(Request $request, $id)
+    {
+        $admin = $request->user();
+        $change = ProviderPendingChange::with('provider')->findOrFail($id);
+
+        if ($change->status !== 'pending') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This change request has already been processed.',
+            ], 400);
+        }
+
+        $validated = $request->validate([
+            'admin_notes' => 'nullable|string|max:1000',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            // Apply the changes to the provider profile
+            $change->provider->update($change->changed_fields);
+
+            // Mark the change as approved
+            $change->update([
+                'status' => 'approved',
+                'reviewed_by' => $admin->id,
+                'reviewed_at' => now(),
+                'admin_notes' => $validated['admin_notes'] ?? null,
+            ]);
+
+            DB::commit();
+
+            \Log::info('=== PROVIDER CHANGE APPROVED ===', [
+                'change_id' => $change->id,
+                'provider_id' => $change->provider_id,
+                'approved_by' => $admin->id,
+                'changed_fields' => $change->changed_fields,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Provider profile changes have been approved and applied.',
+                'data' => [
+                    'change_id' => $change->id,
+                    'status' => $change->status,
+                    'reviewed_at' => $change->reviewed_at,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Error approving provider change: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Reject pending provider profile changes
+     */
+    public function rejectPendingChange(Request $request, $id)
+    {
+        $admin = $request->user();
+        $change = ProviderPendingChange::findOrFail($id);
+
+        if ($change->status !== 'pending') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This change request has already been processed.',
+            ], 400);
+        }
+
+        $validated = $request->validate([
+            'rejection_reason' => 'required|string|max:1000',
+            'admin_notes' => 'nullable|string|max:1000',
+        ]);
+
+        $change->update([
+            'status' => 'rejected',
+            'reviewed_by' => $admin->id,
+            'reviewed_at' => now(),
+            'rejection_reason' => $validated['rejection_reason'],
+            'admin_notes' => $validated['admin_notes'] ?? null,
+        ]);
+
+        \Log::info('=== PROVIDER CHANGE REJECTED ===', [
+            'change_id' => $change->id,
+            'provider_id' => $change->provider_id,
+            'rejected_by' => $admin->id,
+            'rejection_reason' => $validated['rejection_reason'],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Provider profile changes have been rejected.',
+            'data' => [
+                'change_id' => $change->id,
+                'status' => $change->status,
+                'reviewed_at' => $change->reviewed_at,
+                'rejection_reason' => $change->rejection_reason,
+            ]
+        ]);
     }
 }

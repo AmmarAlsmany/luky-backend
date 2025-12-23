@@ -117,9 +117,6 @@ class BookingController extends Controller
             // Check if time is within working hours
             $this->validateWorkingHours($provider, $validated['booking_date'], $validated['start_time']);
 
-            // Check concurrent bookings limit
-            $this->validateConcurrentBookings($provider, $startDateTime, $endDateTime);
-
             // Validate and apply promo code if provided
             $discountAmount = 0;
             $promoCodeId = null;
@@ -272,29 +269,6 @@ class BookingController extends Controller
         }
     }
 
-    /**
-     * Validate concurrent bookings
-     */
-    protected function validateConcurrentBookings(ServiceProvider $provider, string $startTime, string $endTime)
-    {
-        $concurrentCount = Booking::where('provider_id', $provider->id)
-            ->whereIn('status', ['pending', 'confirmed'])
-            ->where(function ($query) use ($startTime, $endTime) {
-                $query->whereBetween('start_time', [$startTime, $endTime])
-                      ->orWhereBetween('end_time', [$startTime, $endTime])
-                      ->orWhere(function ($q) use ($startTime, $endTime) {
-                          $q->where('start_time', '<=', $startTime)
-                            ->where('end_time', '>=', $endTime);
-                      });
-            })
-            ->count();
-
-        if ($concurrentCount >= $provider->max_concurrent_bookings) {
-            throw ValidationException::withMessages([
-                'start_time' => ['No available slots at this time. Please choose another time.']
-            ]);
-        }
-    }
 
     /**
      * Get client bookings
@@ -364,7 +338,8 @@ class BookingController extends Controller
         }
 
         $status = $request->get('status');
-        $date = $request->get('date'); // YYYY-MM-DD
+        $date = $request->get('date'); // YYYY-MM-DD (specific date)
+        $dateFilter = $request->get('date_filter'); // today, this_month, all
 
         $query = Booking::with(['client', 'items.service'])
             ->where('provider_id', $provider->id);
@@ -373,11 +348,31 @@ class BookingController extends Controller
             $query->where('status', $status);
         }
 
-        if ($date) {
+        // Date filtering
+        if ($dateFilter) {
+            switch ($dateFilter) {
+                case 'today':
+                    $query->whereDate('booking_date', Carbon::today());
+                    break;
+                case 'this_month':
+                    $query->whereYear('booking_date', Carbon::now()->year)
+                          ->whereMonth('booking_date', Carbon::now()->month);
+                    break;
+                case 'all':
+                    // No date filter - show all bookings
+                    break;
+                default:
+                    // If invalid filter, default to today
+                    $query->whereDate('booking_date', Carbon::today());
+            }
+        } elseif ($date) {
+            // Support legacy single date parameter
             $query->whereDate('booking_date', $date);
         }
 
-        $bookings = $query->orderBy('start_time')->paginate(20);
+        $bookings = $query->orderBy('booking_date', 'desc')
+                          ->orderBy('start_time', 'desc')
+                          ->paginate(20);
 
         return response()->json([
             'success' => true,
@@ -403,10 +398,27 @@ class BookingController extends Controller
             ->where('status', 'pending')
             ->firstOrFail();
 
+        // Get payment timeout from admin settings
+        $paymentTimeoutMinutes = (int) (\App\Models\AppSetting::where('key', 'payment_timeout_minutes')->value('value') ?? 5);
+
+        \Log::info('=== ACCEPT BOOKING DEBUG ===', [
+            'booking_id' => $booking->id,
+            'timeout_minutes' => $paymentTimeoutMinutes,
+            'payment_deadline' => now()->addMinutes($paymentTimeoutMinutes)->toDateTimeString()
+        ]);
+
         $booking->update([
             'status' => 'confirmed',
-            'confirmed_at' => now()
+            'confirmed_at' => now(),
+            'payment_deadline' => now()->addMinutes($paymentTimeoutMinutes)
         ]);
+
+        \Log::info('=== AFTER UPDATE ===', [
+            'payment_deadline_raw' => $booking->getRawOriginal('payment_deadline')
+        ]);
+
+        // Refresh the booking to get the updated values
+        $booking->refresh();
 
         // Send notification to client about booking acceptance
         $this->notificationService->sendBookingAccepted($booking);
@@ -559,10 +571,19 @@ class BookingController extends Controller
             'cancellation_reason' => 'nullable|string|max:500'
         ]);
 
-        $booking = Booking::with('payment')->where('client_id', $user->id)
+        // Check if user is admin/super_admin
+        $isAdmin = $user->hasAnyRole(['admin', 'super_admin', 'manager']);
+
+        // Build query - admins can cancel any booking, clients only their own
+        $query = Booking::with(['payment', 'client'])
             ->where('id', $id)
-            ->whereIn('status', ['pending', 'confirmed'])
-            ->firstOrFail();
+            ->whereIn('status', ['pending', 'confirmed']);
+
+        if (!$isAdmin) {
+            $query->where('client_id', $user->id);
+        }
+
+        $booking = $query->firstOrFail();
 
         DB::beginTransaction();
         try {
@@ -573,14 +594,63 @@ class BookingController extends Controller
 
             // Update payment status if refund is applicable
             if ($refundAmount > 0 && $booking->payment_status === 'paid') {
+                $payment = $booking->payment;
+
+                // Handle wallet refunds
+                if ($payment && $payment->method === 'wallet') {
+                    $client = $booking->client;
+                    $balanceBefore = $client->wallet_balance;
+                    $balanceAfter = $balanceBefore + $refundAmount;
+
+                    // Create refund transaction
+                    \App\Models\WalletTransaction::create([
+                        'user_id' => $client->id,
+                        'type' => 'refund',
+                        'amount' => $refundAmount,
+                        'description' => "Refund for cancelled booking #{$booking->id}",
+                        'reference_number' => 'REFUND-' . $booking->id,
+                        'related_id' => $booking->id,
+                        'related_type' => 'booking',
+                        'balance_before' => $balanceBefore,
+                        'balance_after' => $balanceAfter,
+                        'metadata' => [
+                            'booking_id' => $booking->id,
+                            'cancellation_fee' => $cancellationFee,
+                            'original_amount' => $booking->total_amount,
+                        ],
+                    ]);
+
+                    // Credit wallet
+                    $client->increment('wallet_balance', $refundAmount);
+
+                    Log::info('Wallet refund processed', [
+                        'booking_id' => $booking->id,
+                        'refund_amount' => $refundAmount,
+                        'cancellation_fee' => $cancellationFee,
+                        'new_balance' => $balanceAfter,
+                    ]);
+                }
+                // Handle MyFatoorah refunds
+                elseif ($payment && $payment->gateway === 'myfatoorah') {
+                    // TODO: Process actual refund via MyFatoorah API
+                    Log::info('MyFatoorah refund needed', [
+                        'booking_id' => $booking->id,
+                        'payment_id' => $payment->payment_id,
+                        'refund_amount' => $refundAmount,
+                    ]);
+                }
+
                 $booking->update(['payment_status' => 'refunded']);
-                // TODO: Process actual refund via MyFatoorah API
             }
+
+            // Determine who cancelled the booking
+            $cancelledBy = $isAdmin ? 'admin' : 'client';
+            $defaultReason = $isAdmin ? 'Cancelled by admin' : 'Cancelled by client';
 
             $booking->update([
                 'status' => 'cancelled',
-                'cancellation_reason' => $validated['cancellation_reason'] ?? 'Cancelled by client',
-                'cancelled_by' => 'client',
+                'cancellation_reason' => $validated['cancellation_reason'] ?? $defaultReason,
+                'cancelled_by' => $cancelledBy,
                 'cancelled_at' => now(),
                 'discount_amount' => $booking->discount_amount + $cancellationFee, // Store cancellation fee
             ]);
@@ -633,34 +703,12 @@ class BookingController extends Controller
             ->orderBy('start_time')
             ->get();
 
-        // Get concurrent bookings info
-        $timeSlots = [];
-        foreach ($bookings as $booking) {
-            $startHour = date('H:i', strtotime($booking->start_time));
-            
-            if (!isset($timeSlots[$startHour])) {
-                $timeSlots[$startHour] = [
-                    'time' => $startHour,
-                    'bookings_count' => 0,
-                    'max_concurrent' => $provider->max_concurrent_bookings,
-                    'available_slots' => $provider->max_concurrent_bookings,
-                    'bookings' => []
-                ];
-            }
-            
-            $timeSlots[$startHour]['bookings_count']++;
-            $timeSlots[$startHour]['available_slots'] = max(0, $provider->max_concurrent_bookings - $timeSlots[$startHour]['bookings_count']);
-            $timeSlots[$startHour]['bookings'][] = new BookingResource($booking);
-        }
-
         return response()->json([
             'success' => true,
             'data' => [
                 'date' => $date,
                 'total_bookings' => $bookings->count(),
-                'max_concurrent_bookings' => $provider->max_concurrent_bookings,
-                'schedule' => array_values($timeSlots),
-                'all_bookings' => BookingResource::collection($bookings)
+                'bookings' => BookingResource::collection($bookings)
             ]
         ]);
     }

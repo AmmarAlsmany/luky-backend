@@ -13,9 +13,17 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use App\Http\Resources\ServiceProviderResource;
 use App\Http\Resources\ServiceResource;
+use App\Models\ProviderPendingChange;
+use App\Services\NotificationService;
 
 class ProviderController extends Controller
 {
+    protected NotificationService $notificationService;
+
+    public function __construct(NotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
     /**
      * Register as provider (after user registration)
      * This creates the provider profile for an existing user
@@ -97,11 +105,25 @@ class ProviderController extends Controller
         // Original flow: existing user upgrading to provider
         $user = $currentUser;
 
-        // Check if user is already a provider
-        if ($user->user_type === 'provider' && $user->providerProfile) {
-            throw ValidationException::withMessages([
-                'message' => ['You are already registered as a provider.']
-            ]);
+        // Check if user already has a provider profile
+        if ($user->providerProfile) {
+            // User already has a provider profile
+            // Check if it's complete or incomplete
+            $provider = $user->providerProfile;
+
+            // If provider profile exists and has all required data, they're already registered
+            if ($provider->business_name && $provider->address && $provider->city_id) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'You are already registered as a provider.',
+                    'data' => [
+                        'provider' => new ServiceProviderResource($provider->load(['user', 'city'])),
+                        'next_step' => $provider->verification_status === 'pending' ? 'upload_documents' : 'complete'
+                    ]
+                ], 200);
+            }
+
+            // If provider profile exists but incomplete, we'll update it below
         }
 
         $validated = $request->validate([
@@ -125,11 +147,45 @@ class ProviderController extends Controller
             $category = \App\Models\ServiceCategory::findOrFail($validated['category_id']);
             $businessType = $category->getBusinessType();
 
-            // Update user type to provider
-            $user->update(['user_type' => 'provider']);
-            $user->assignRole('provider');
+            // Update user type to provider if not already
+            if ($user->user_type !== 'provider') {
+                $user->update(['user_type' => 'provider']);
+            }
 
-            // Create provider profile
+            // Assign provider role if not already assigned
+            if (!$user->hasRole('provider')) {
+                $user->assignRole('provider');
+            }
+
+            // Check if provider profile exists (incomplete registration)
+            if ($user->providerProfile) {
+                // Update existing incomplete provider profile
+                $provider = $user->providerProfile;
+                $provider->update([
+                    'business_name' => $validated['business_name'],
+                    'business_type' => $businessType,
+                    'description' => $validated['description'] ?? '',
+                    'city_id' => $validated['city_id'],
+                    'address' => $validated['address'],
+                    'latitude' => $validated['latitude'] ?? null,
+                    'longitude' => $validated['longitude'] ?? null,
+                    'working_hours' => $validated['working_hours'],
+                    'off_days' => $validated['off_days'] ?? [],
+                ]);
+
+                DB::commit();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Provider registration updated successfully. Please upload required documents.',
+                    'data' => [
+                        'provider' => new ServiceProviderResource($provider->load(['user', 'city'])),
+                        'next_step' => 'upload_documents'
+                    ]
+                ], 200);
+            }
+
+            // Create new provider profile
             $provider = ServiceProvider::create([
                 'user_id' => $user->id,
                 'business_name' => $validated['business_name'],
@@ -170,14 +226,22 @@ class ProviderController extends Controller
         $user = $request->user();
         $provider = $user->providerProfile;
 
+        \Log::info('=== DOCUMENT UPLOAD REQUEST ===', [
+            'user_id' => $user->id,
+            'provider_id' => $provider->id ?? 'N/A',
+            'has_file' => $request->hasFile('document'),
+            'document_type' => $request->input('document_type'),
+        ]);
+
         if (!$provider) {
+            \Log::error('Provider profile not found for user: ' . $user->id);
             throw ValidationException::withMessages([
                 'message' => ['Provider profile not found. Please register as provider first.']
             ]);
         }
 
         $validated = $request->validate([
-            'document_type' => 'required|in:freelance_license,commercial_register,municipal_license,national_id,agreement_contract',
+            'document_type' => 'required|string|max:100', // Allow any document type for multiple files
             'document' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120', // 5MB max
         ]);
 
@@ -185,6 +249,14 @@ class ProviderController extends Controller
         $file = $request->file('document');
         $fileName = time() . '_' . $file->getClientOriginalName();
         $filePath = $file->storeAs('provider_documents/' . $provider->id, $fileName, 'public');
+
+        \Log::info('File stored successfully', [
+            'file_name' => $fileName,
+            'file_path' => $filePath,
+            'original_name' => $file->getClientOriginalName(),
+            'mime_type' => $file->getMimeType(),
+            'file_size' => $file->getSize(),
+        ]);
 
         // Create document record
         $document = ProviderDocument::create([
@@ -195,6 +267,13 @@ class ProviderController extends Controller
             'mime_type' => $file->getMimeType(),
             'file_size' => $file->getSize(),
             'verification_status' => 'pending',
+        ]);
+
+        \Log::info('Document record created', [
+            'document_id' => $document->id,
+            'document_type' => $document->document_type,
+            'provider_id' => $provider->id,
+            'total_documents' => ProviderDocument::where('provider_id', $provider->id)->count(),
         ]);
 
         return response()->json([
@@ -231,12 +310,58 @@ class ProviderController extends Controller
     }
 
     /**
+     * Get pending profile changes for this provider
+     */
+    public function getPendingChanges(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $provider = $user->providerProfile;
+
+        if (!$provider) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Provider profile not found'
+            ], 404);
+        }
+
+        $pendingChanges = ProviderPendingChange::where('provider_id', $provider->id)
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($change) {
+                return [
+                    'id' => $change->id,
+                    'changed_fields' => $change->changed_fields,
+                    'old_values' => $change->old_values,
+                    'status' => $change->status,
+                    'rejection_reason' => $change->rejection_reason,
+                    'admin_notes' => $change->admin_notes,
+                    'created_at' => $change->created_at,
+                    'reviewed_at' => $change->reviewed_at,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => $pendingChanges,
+            'has_pending' => $pendingChanges->where('status', 'pending')->isNotEmpty(),
+        ]);
+    }
+
+    /**
      * Update provider profile
      */
     public function updateProfile(Request $request): JsonResponse
     {
         $user = $request->user();
         $provider = $user->providerProfile;
+
+        // Log incoming request data
+        \Log::info('=== UPDATE PROVIDER PROFILE REQUEST ===', [
+            'user_id' => $user->id,
+            'provider_id' => $provider->id ?? 'N/A',
+            'request_data' => $request->all(),
+            'headers' => $request->headers->all(),
+        ]);
 
         if (!$provider) {
             throw ValidationException::withMessages([
@@ -246,20 +371,102 @@ class ProviderController extends Controller
 
         $validated = $request->validate([
             'business_name' => 'sometimes|string|max:255',
+            'category_id' => 'sometimes|exists:service_categories,id',
             'description' => 'sometimes|string|max:1000',
+            'city_id' => 'sometimes|exists:cities,id',
             'address' => 'sometimes|string|max:500',
             'latitude' => 'sometimes|numeric|between:-90,90',
             'longitude' => 'sometimes|numeric|between:-180,180',
             'working_hours' => 'sometimes|array',
             'off_days' => 'sometimes|array',
+            'license_number' => 'sometimes|nullable|string|max:255',
+            'commercial_register' => 'sometimes|nullable|string|max:255',
+            'municipal_license' => 'sometimes|nullable|string|max:255',
         ]);
 
-        $provider->update($validated);
+        // If category is being updated, map it to business_type
+        if (isset($validated['category_id'])) {
+            $category = \App\Models\ServiceCategory::findOrFail($validated['category_id']);
+            $validated['business_type'] = $category->getBusinessType();
+            unset($validated['category_id']); // Remove category_id as it's not a provider field
+        }
+
+        \Log::info('=== VALIDATED DATA ===', [
+            'validated' => $validated,
+            'provider_before' => $provider->toArray(),
+        ]);
+
+        // Store old values for comparison
+        $oldValues = [];
+        foreach (array_keys($validated) as $field) {
+            $oldValues[$field] = $provider->{$field};
+        }
+
+        // Check if there's already a pending change request
+        $existingPendingChange = ProviderPendingChange::where('provider_id', $provider->id)
+            ->where('status', 'pending')
+            ->first();
+
+        if ($existingPendingChange) {
+            // Update the existing pending change request
+            $existingPendingChange->update([
+                'changed_fields' => $validated,
+                'old_values' => $oldValues,
+            ]);
+
+            \Log::info('=== PENDING CHANGE UPDATED ===', [
+                'pending_change_id' => $existingPendingChange->id,
+                'changed_fields' => $validated,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Your profile changes have been updated and are waiting for admin approval.',
+                'data' => [
+                    'provider' => new ServiceProviderResource($provider->fresh()),
+                    'pending_change' => [
+                        'id' => $existingPendingChange->id,
+                        'status' => $existingPendingChange->status,
+                        'changed_fields' => $existingPendingChange->changed_fields,
+                        'created_at' => $existingPendingChange->created_at,
+                    ]
+                ]
+            ]);
+        }
+
+        // Create new pending change request
+        $pendingChange = ProviderPendingChange::create([
+            'provider_id' => $provider->id,
+            'changed_fields' => $validated,
+            'old_values' => $oldValues,
+            'status' => 'pending',
+        ]);
+
+        \Log::info('=== PENDING CHANGE CREATED ===', [
+            'pending_change_id' => $pendingChange->id,
+            'changed_fields' => $validated,
+            'old_values' => $oldValues,
+        ]);
+
+        // Send notification to admins
+        $this->notificationService->sendProviderChangeRequest(
+            $provider->id,
+            $provider->business_name,
+            $validated
+        );
 
         return response()->json([
             'success' => true,
-            'message' => 'Provider profile updated successfully',
-            'data' => new ServiceProviderResource($provider->fresh())
+            'message' => 'Your profile changes have been submitted and are waiting for admin approval.',
+            'data' => [
+                'provider' => new ServiceProviderResource($provider->fresh()),
+                'pending_change' => [
+                    'id' => $pendingChange->id,
+                    'status' => $pendingChange->status,
+                    'changed_fields' => $pendingChange->changed_fields,
+                    'created_at' => $pendingChange->created_at,
+                ]
+            ]
         ]);
     }
 
@@ -422,12 +629,18 @@ class ProviderController extends Controller
         $validated = $request->validate([
             'category_id' => 'required|exists:service_categories,id',
             'name' => 'required|string|max:255',
+            'name_en' => 'nullable|string|max:255',
+            'name_ar' => 'nullable|string|max:255',
             'description' => 'nullable|string|max:1000',
+            'description_en' => 'nullable|string|max:1000',
+            'description_ar' => 'nullable|string|max:1000',
             'price' => 'required|numeric|min:0',
             'duration_minutes' => 'required|integer|min:15|max:480', // 15 min to 8 hours
             'available_at_home' => 'sometimes|boolean',
             'home_service_price' => 'required_if:available_at_home,true|nullable|numeric|min:0',
             'is_active' => 'sometimes|boolean',
+            'images' => 'nullable|array|max:3',
+            'images.*' => 'image|mimes:jpeg,png,jpg|max:5120', // 5MB max per image
         ]);
 
         if ($validated['available_at_home'] && !$validated['home_service_price']) {
@@ -439,7 +652,11 @@ class ProviderController extends Controller
         $service = $provider->services()->create([
             'category_id' => $validated['category_id'],
             'name' => $validated['name'],
+            'name_en' => $validated['name_en'] ?? null,
+            'name_ar' => $validated['name_ar'] ?? null,
             'description' => $validated['description'] ?? null,
+            'description_en' => $validated['description_en'] ?? null,
+            'description_ar' => $validated['description_ar'] ?? null,
             'price' => $validated['price'],
             'available_at_home' => $validated['available_at_home'] ?? false,
             'home_service_price' => $validated['home_service_price'] ?? null,
@@ -448,10 +665,18 @@ class ProviderController extends Controller
             'sort_order' => $provider->services()->count() + 1,
         ]);
 
+        // Handle image uploads
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $image) {
+                $service->addMedia($image)
+                    ->toMediaCollection('service_images');
+            }
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Service created successfully',
-            'data' => new ServiceResource($service->load('category'))
+            'data' => new ServiceResource($service->fresh()->load('category'))
         ], 201);
     }
 
@@ -474,13 +699,31 @@ class ProviderController extends Controller
         $validated = $request->validate([
             'category_id' => 'sometimes|exists:service_categories,id',
             'name' => 'sometimes|string|max:255',
+            'name_en' => 'nullable|string|max:255',
+            'name_ar' => 'nullable|string|max:255',
             'description' => 'nullable|string|max:1000',
+            'description_en' => 'nullable|string|max:1000',
+            'description_ar' => 'nullable|string|max:1000',
             'price' => 'sometimes|numeric|min:0',
             'duration_minutes' => 'sometimes|integer|min:15|max:480',
+            'available_at_home' => 'sometimes|boolean',
+            'home_service_price' => 'nullable|numeric|min:0',
             'is_active' => 'sometimes|boolean',
+            'images' => 'nullable|array|max:3',
+            'images.*' => 'image|mimes:jpeg,png,jpg|max:5120', // 5MB max per image
         ]);
 
         $service->update($validated);
+
+        // Handle image uploads
+        if ($request->hasFile('images')) {
+            // Clear existing images and add new ones
+            $service->clearMediaCollection('service_images');
+            foreach ($request->file('images') as $image) {
+                $service->addMedia($image)
+                    ->toMediaCollection('service_images');
+            }
+        }
 
         return response()->json([
             'success' => true,
@@ -540,33 +783,482 @@ class ProviderController extends Controller
             ]);
         }
 
-        $period = $request->get('period', 'month'); // day, week, month, year
+        // Support custom date ranges or period-based filtering
+        if ($request->has('start_date') && $request->has('end_date')) {
+            $startDate = \Carbon\Carbon::parse($request->get('start_date'))->startOfDay();
+            $endDate = \Carbon\Carbon::parse($request->get('end_date'))->endOfDay();
+            $period = 'custom';
+        } else {
+            $period = $request->get('period', 'month'); // day, week, month, year
+            $startDate = match ($period) {
+                'day' => now()->startOfDay(),
+                'week' => now()->startOfWeek(),
+                'month' => now()->startOfMonth(),
+                'year' => now()->startOfYear(),
+                default => now()->startOfMonth(),
+            };
+            $endDate = now()->endOfDay();
+        }
 
-        $startDate = match ($period) {
-            'day' => now()->startOfDay(),
-            'week' => now()->startOfWeek(),
-            'month' => now()->startOfMonth(),
-            'year' => now()->startOfYear(),
-            default => now()->startOfMonth(),
-        };
+        // Optimize: Use single query with aggregates instead of multiple queries
+        $bookingStats = $provider->bookings()
+            ->selectRaw("
+                COUNT(*) as total_bookings,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_bookings,
+                SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed_bookings,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_bookings,
+                SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_bookings,
+                SUM(CASE WHEN status = 'completed' THEN total_amount ELSE 0 END) as total_revenue,
+                SUM(CASE WHEN status = 'completed' THEN commission_amount ELSE 0 END) as commission_paid
+            ")
+            ->where('created_at', '>=', $startDate)
+            ->where('created_at', '<=', $endDate)
+            ->first();
 
-        $bookingsQuery = $provider->bookings()->where('created_at', '>=', $startDate);
+        // Get counts in parallel using cache where possible
+        $unreadNotifications = \App\Models\Notification::where('user_id', $user->id)
+            ->where('is_read', false)
+            ->count();
+
+        $activeServices = \Cache::remember(
+            "provider:{$provider->id}:active_services_count",
+            300, // 5 minutes
+            fn() => $provider->services()->where('is_active', true)->count()
+        );
 
         $analytics = [
-            'total_bookings' => $bookingsQuery->count(),
-            'completed_bookings' => (clone $bookingsQuery)->where('status', 'completed')->count(),
-            'cancelled_bookings' => (clone $bookingsQuery)->where('status', 'cancelled')->count(),
-            'total_revenue' => (clone $bookingsQuery)->where('status', 'completed')->sum('total_amount'),
-            'commission_paid' => (clone $bookingsQuery)->where('status', 'completed')->sum('commission_amount'),
+            'total_bookings' => (int) $bookingStats->total_bookings,
+            'pending_bookings' => (int) $bookingStats->pending_bookings,
+            'confirmed_bookings' => (int) $bookingStats->confirmed_bookings,
+            'completed_bookings' => (int) $bookingStats->completed_bookings,
+            'cancelled_bookings' => (int) $bookingStats->cancelled_bookings,
+            'total_revenue' => (float) $bookingStats->total_revenue,
+            'commission_paid' => (float) $bookingStats->commission_paid,
             'average_rating' => $provider->average_rating,
             'total_reviews' => $provider->total_reviews,
-            'active_services' => $provider->services()->where('is_active', true)->count(),
+            'active_services' => $activeServices,
+            'unread_notifications' => $unreadNotifications,
         ];
 
         return response()->json([
             'success' => true,
             'data' => $analytics,
             'period' => $period
+        ]);
+    }
+
+    /**
+     * Get daily booking statistics for chart
+     */
+    public function getDailyBookingStats(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $provider = $user->providerProfile;
+
+        if (!$provider) {
+            throw ValidationException::withMessages([
+                'message' => ['Provider profile not found.']
+            ]);
+        }
+
+        // Get date range (default to current week)
+        if ($request->has('start_date') && $request->has('end_date')) {
+            $startDate = \Carbon\Carbon::parse($request->get('start_date'))->startOfDay();
+            $endDate = \Carbon\Carbon::parse($request->get('end_date'))->endOfDay();
+        } else {
+            $startDate = now()->startOfWeek();
+            $endDate = now()->endOfWeek();
+        }
+
+        // Get daily booking counts
+        $dailyStats = $provider->bookings()
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as count')
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->groupBy('date')
+            ->orderBy('date')
+            ->get()
+            ->keyBy('date');
+
+        // Generate all dates in range with counts
+        $stats = [];
+        $currentDate = $startDate->copy();
+
+        while ($currentDate <= $endDate) {
+            $dateStr = $currentDate->format('Y-m-d');
+            $dayName = $currentDate->format('l'); // Monday, Tuesday, etc.
+
+            $stats[] = [
+                'date' => $dateStr,
+                'day' => $dayName,
+                'count' => $dailyStats->get($dateStr)->count ?? 0,
+            ];
+
+            $currentDate->addDay();
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $stats
+        ]);
+    }
+
+    /**
+     * Update provider bank information
+     */
+    public function updateBankInfo(Request $request)
+    {
+        try {
+            // Get authenticated user
+            $user = auth()->user();
+
+            \Log::info('=== UPDATE BANK INFO REQUEST ===', [
+                'user_id' => $user->id,
+                'request_data' => $request->all(),
+            ]);
+
+            // Get provider profile
+            $provider = $user->serviceProvider;
+            if (!$provider) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Provider profile not found.'
+                ], 404);
+            }
+
+            // Validate request
+            $validated = $request->validate([
+                'account_title' => 'required|string|max:255',
+                'account_number' => 'required|string|max:255',
+                'iban' => 'required|string|max:255',
+                'currency' => 'required|string|max:10',
+            ]);
+
+            \Log::info('=== VALIDATION PASSED ===', [
+                'validated_data' => $validated,
+            ]);
+
+            // Update provider bank information
+            $provider->update($validated);
+
+            \Log::info('=== BANK INFO UPDATED ===', [
+                'provider_id' => $provider->id,
+                'bank_info' => $validated,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Bank information updated successfully.',
+                'data' => new ServiceProviderResource($provider->fresh())
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('=== VALIDATION ERROR ===', [
+                'errors' => $e->errors(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('=== ERROR UPDATING BANK INFO ===', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while updating bank information.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get clients who have completed bookings with this provider
+     * Endpoint: GET /provider/clients
+     */
+    public function getClients(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $provider = $user->providerProfile;
+
+        if (!$provider) {
+            throw ValidationException::withMessages([
+                'message' => ['Provider profile not found.']
+            ]);
+        }
+
+        // Get unique clients who have completed or confirmed bookings with this provider
+        // Excludes: pending, cancelled, rejected bookings
+        $clients = \App\Models\User::whereHas('bookings', function ($query) use ($provider) {
+            $query->where('provider_id', $provider->id)
+                  ->whereIn('status', ['completed', 'confirmed']);
+        })
+        ->with(['bookings' => function ($query) use ($provider) {
+            $query->where('provider_id', $provider->id)
+                  ->whereIn('status', ['completed', 'confirmed'])
+                  ->latest()
+                  ->take(1);
+        }])
+        ->get()
+        ->map(function ($client) {
+            $lastBooking = $client->bookings->first();
+            return [
+                'id' => $client->id,
+                'name' => $client->name,
+                'email' => $client->email,
+                'phone' => $client->phone,
+                'avatar' => $client->avatar_url,
+                'total_bookings' => $client->bookings->count(),
+                'last_booking_date' => $lastBooking ? $lastBooking->booking_date : null,
+                'created_at' => $client->created_at->format('Y-m-d H:i:s'),
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $clients,
+        ]);
+    }
+
+    /**
+     * Send notification to selected clients
+     * Endpoint: POST /provider/send-notification
+     */
+    public function sendNotificationToClients(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $provider = $user->providerProfile;
+
+        if (!$provider) {
+            throw ValidationException::withMessages([
+                'message' => ['Provider profile not found.']
+            ]);
+        }
+
+        $validated = $request->validate([
+            'client_ids' => 'required|array|min:1',
+            'client_ids.*' => 'exists:users,id',
+            'title' => 'required|string|max:255',
+            'message' => 'required|string|max:1000',
+        ]);
+
+        $successCount = 0;
+        $failedCount = 0;
+
+        foreach ($validated['client_ids'] as $clientId) {
+            try {
+                // Send notification using the NotificationService
+                $this->notificationService->send(
+                    $clientId,
+                    'promotional',
+                    $validated['title'],
+                    $validated['message'],
+                    [
+                        'provider_id' => $provider->id,
+                        'provider_name' => $provider->business_name,
+                    ]
+                );
+                $successCount++;
+            } catch (\Exception $e) {
+                \Log::error('Failed to send notification to client ' . $clientId, [
+                    'error' => $e->getMessage()
+                ]);
+                $failedCount++;
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Notification sent to $successCount client(s).",
+            'data' => [
+                'sent' => $successCount,
+                'failed' => $failedCount,
+            ]
+        ]);
+    }
+
+    /**
+     * Get provider's available balance for withdrawal
+     */
+    public function getAvailableBalance(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $provider = $user->providerProfile;
+
+        if (!$provider) {
+            throw ValidationException::withMessages([
+                'message' => ['Provider profile not found.']
+            ]);
+        }
+
+        // Get total revenue from completed bookings
+        $totalRevenue = \App\Models\Booking::where('provider_id', $provider->id)
+            ->where('status', 'completed')
+            ->where('payment_status', 'paid')
+            ->sum('total_amount');
+
+        // Calculate total commission
+        $commissionRate = $provider->commission_rate ?? 15; // Default 15%
+        $totalCommission = $totalRevenue * ($commissionRate / 100);
+
+        // Get total withdrawn amount (completed withdrawals only)
+        $totalWithdrawn = \App\Models\WithdrawalRequest::where('provider_id', $provider->id)
+            ->where('status', 'completed')
+            ->sum('amount');
+
+        // Get pending withdrawal requests
+        $pendingWithdrawals = \App\Models\WithdrawalRequest::where('provider_id', $provider->id)
+            ->whereIn('status', ['pending', 'approved', 'processing'])
+            ->sum('amount');
+
+        // Calculate available balance
+        $netRevenue = $totalRevenue - $totalCommission;
+        $availableBalance = $netRevenue - $totalWithdrawn - $pendingWithdrawals;
+
+        // Get minimum withdrawal amount from settings
+        $minimumWithdrawal = \App\Models\AppSetting::get('minimum_withdrawal_amount', 100);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'total_revenue' => (float) $totalRevenue,
+                'commission_rate' => (float) $commissionRate,
+                'total_commission' => (float) $totalCommission,
+                'net_revenue' => (float) $netRevenue,
+                'total_withdrawn' => (float) $totalWithdrawn,
+                'pending_withdrawals' => (float) $pendingWithdrawals,
+                'available_balance' => (float) $availableBalance,
+                'minimum_withdrawal' => (float) $minimumWithdrawal,
+                'can_withdraw' => $availableBalance >= $minimumWithdrawal,
+            ]
+        ]);
+    }
+
+    /**
+     * Request a withdrawal
+     */
+    public function requestWithdrawal(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $provider = $user->providerProfile;
+
+        if (!$provider) {
+            throw ValidationException::withMessages([
+                'message' => ['Provider profile not found.']
+            ]);
+        }
+
+        $validated = $request->validate([
+            'amount' => 'required|numeric|min:1',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        // Get available balance
+        $balanceResponse = $this->getAvailableBalance($request);
+        $balanceData = $balanceResponse->getData()->data;
+
+        // Validate amount
+        if ($validated['amount'] > $balanceData->available_balance) {
+            throw ValidationException::withMessages([
+                'amount' => ['Withdrawal amount exceeds available balance.']
+            ]);
+        }
+
+        if ($validated['amount'] < $balanceData->minimum_withdrawal) {
+            throw ValidationException::withMessages([
+                'amount' => ["Minimum withdrawal amount is {$balanceData->minimum_withdrawal} SAR."]
+            ]);
+        }
+
+        // Get bank info
+        if (!$provider->account_title || !$provider->account_number) {
+            throw ValidationException::withMessages([
+                'bank_info' => ['Please complete your bank account information first.']
+            ]);
+        }
+
+        // Calculate commission
+        $commissionAmount = $validated['amount'] * ($provider->commission_rate ?? 15) / 100;
+        $netAmount = $validated['amount'] - $commissionAmount;
+
+        // Create withdrawal request
+        $withdrawal = \App\Models\WithdrawalRequest::create([
+            'provider_id' => $provider->id,
+            'amount' => $validated['amount'],
+            'commission_amount' => $commissionAmount,
+            'net_amount' => $netAmount,
+            'status' => 'pending',
+            'bank_account_title' => $provider->account_title,
+            'bank_account_number' => $provider->account_number,
+            'bank_iban' => $provider->iban,
+            'notes' => $validated['notes'] ?? null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Withdrawal request submitted successfully',
+            'data' => [
+                'id' => $withdrawal->id,
+                'amount' => $withdrawal->amount,
+                'net_amount' => $withdrawal->net_amount,
+                'status' => $withdrawal->status,
+                'created_at' => $withdrawal->created_at->format('Y-m-d H:i:s'),
+            ]
+        ], 201);
+    }
+
+    /**
+     * Get provider's withdrawal history
+     */
+    public function getWithdrawalHistory(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $provider = $user->providerProfile;
+
+        if (!$provider) {
+            throw ValidationException::withMessages([
+                'message' => ['Provider profile not found.']
+            ]);
+        }
+
+        $query = \App\Models\WithdrawalRequest::where('provider_id', $provider->id);
+
+        // Filter by status if provided
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $withdrawals = $query->orderByDesc('created_at')->paginate(20);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'withdrawals' => $withdrawals->getCollection()->map(function ($withdrawal) {
+                    return [
+                        'id' => $withdrawal->id,
+                        'amount' => (float) $withdrawal->amount,
+                        'commission_amount' => (float) $withdrawal->commission_amount,
+                        'net_amount' => (float) $withdrawal->net_amount,
+                        'status' => $withdrawal->status,
+                        'bank_account_title' => $withdrawal->bank_account_title,
+                        'bank_account_number' => substr($withdrawal->bank_account_number, -4), // Last 4 digits only
+                        'notes' => $withdrawal->notes,
+                        'admin_notes' => $withdrawal->admin_notes,
+                        'rejection_reason' => $withdrawal->rejection_reason,
+                        'transaction_reference' => $withdrawal->transaction_reference,
+                        'approved_at' => $withdrawal->approved_at?->format('Y-m-d H:i:s'),
+                        'processed_at' => $withdrawal->processed_at?->format('Y-m-d H:i:s'),
+                        'completed_at' => $withdrawal->completed_at?->format('Y-m-d H:i:s'),
+                        'created_at' => $withdrawal->created_at->format('Y-m-d H:i:s'),
+                    ];
+                }),
+                'pagination' => [
+                    'current_page' => $withdrawals->currentPage(),
+                    'last_page' => $withdrawals->lastPage(),
+                    'total' => $withdrawals->total(),
+                ]
+            ]
         ]);
     }
 }

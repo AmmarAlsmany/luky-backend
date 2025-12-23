@@ -15,21 +15,27 @@ class AppSetting extends Model
     ];
 
     /**
-     * Get a setting value by key
+     * Get a setting value by key (with caching)
      */
     public static function get(string $key, $default = null)
     {
-        $setting = static::where('key', $key)->first();
+        return \Cache::remember(
+            'settings:' . $key,
+            3600, // 1 hour
+            function () use ($key, $default) {
+                $setting = static::where('key', $key)->first();
 
-        if (!$setting) {
-            return $default;
-        }
+                if (!$setting) {
+                    return $default;
+                }
 
-        return static::castValue($setting->value, $setting->type);
+                return static::castValue($setting->value, $setting->type);
+            }
+        );
     }
 
     /**
-     * Set a setting value
+     * Set a setting value (clears cache)
      */
     public static function set(string $key, $value): void
     {
@@ -37,6 +43,10 @@ class AppSetting extends Model
             ['key' => $key],
             ['value' => (string) $value]
         );
+
+        // Clear cache for this setting
+        \Cache::forget('settings:' . $key);
+        \Cache::forget('settings:all');
     }
 
     /**

@@ -564,6 +564,161 @@
 </div>
 @endif
 
+<!-- Documents & Gallery Section -->
+<div class="row mt-3">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header border-bottom">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center">
+                        <iconify-icon icon="solar:gallery-bold-duotone" class="fs-32 text-primary me-3"></iconify-icon>
+                        <div>
+                            <h4 class="card-title mb-0 fw-semibold">{{ __('providers.documents_gallery') }}</h4>
+                            <p class="text-muted mb-0 small">{{ __('providers.uploaded_files_media') }}</p>
+                        </div>
+                    </div>
+                    <span class="badge bg-primary-subtle text-primary fs-6">{{ count($provider['documents'] ?? []) }} {{ __('providers.files') }}</span>
+                </div>
+            </div>
+            <div class="card-body">
+                @if(!empty($provider['documents']) && count($provider['documents']) > 0)
+                    <div class="row g-3">
+                        @foreach($provider['documents'] as $file)
+                            <div class="col-md-4 col-lg-3">
+                                <div class="card border h-100">
+                                    <div class="card-body p-3">
+                                        @if(str_starts_with($file['mime_type'] ?? '', 'image/'))
+                                            <!-- Image Preview -->
+                                            <div class="mb-2 position-relative">
+                                                <img src="{{ $file['url'] }}"
+                                                     alt="{{ $file['name'] }}"
+                                                     class="img-fluid rounded"
+                                                     style="width: 100%; height: 150px; object-fit: cover; cursor: pointer;"
+                                                     onclick="viewImage('{{ $file['url'] }}', '{{ $file['name'] }}')">
+                                                @if($file['document_type'] === 'gallery')
+                                                    <span class="badge bg-info position-absolute top-0 end-0 m-2">
+                                                        <iconify-icon icon="solar:gallery-bold"></iconify-icon> {{ __('providers.gallery') }}
+                                                    </span>
+                                                @endif
+                                            </div>
+                                        @else
+                                            <!-- Document Icon -->
+                                            <div class="mb-2 text-center" style="height: 150px; display: flex; align-items: center; justify-content: center; background: #f8f9fa; border-radius: 8px;">
+                                                <iconify-icon icon="solar:file-text-bold-duotone" class="fs-1 text-muted"></iconify-icon>
+                                            </div>
+                                        @endif
+
+                                        <div class="mt-2">
+                                            <p class="mb-1 fw-semibold small text-truncate" title="{{ $file['name'] }}">{{ $file['name'] }}</p>
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span class="badge bg-light text-dark small">{{ $file['type'] }}</span>
+                                                @if(isset($file['verification_status']))
+                                                    @if($file['verification_status'] === 'verified')
+                                                        <span class="badge bg-success-subtle text-success small">
+                                                            <iconify-icon icon="solar:check-circle-bold"></iconify-icon> {{ __('providers.verified') }}
+                                                        </span>
+                                                    @elseif($file['verification_status'] === 'rejected')
+                                                        <span class="badge bg-danger-subtle text-danger small">
+                                                            <iconify-icon icon="solar:close-circle-bold"></iconify-icon> {{ __('providers.rejected') }}
+                                                        </span>
+                                                    @else
+                                                        <span class="badge bg-warning-subtle text-warning small">
+                                                            <iconify-icon icon="solar:clock-circle-bold"></iconify-icon> {{ __('providers.pending') }}
+                                                        </span>
+                                                    @endif
+                                                @endif
+                                            </div>
+                                            <div class="mt-2 d-flex gap-1">
+                                                <a href="{{ $file['url'] }}" target="_blank" class="btn btn-sm btn-light w-100">
+                                                    <iconify-icon icon="solar:eye-bold"></iconify-icon> {{ __('providers.view') }}
+                                                </a>
+                                                <a href="{{ $file['url'] }}" download class="btn btn-sm btn-primary">
+                                                    <iconify-icon icon="solar:download-bold"></iconify-icon>
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <div class="text-center py-5">
+                        <iconify-icon icon="solar:gallery-broken" class="fs-1 text-muted mb-3"></iconify-icon>
+                        <p class="text-muted">{{ __('providers.no_files_uploaded') }}</p>
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Image Viewer Modal -->
+<div class="modal fade" id="imageViewerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imageViewerTitle"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ __('common.close') }}"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="imageViewerImg" src="" class="img-fluid" alt="">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bank Information Section -->
+<div class="row mt-3">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header border-bottom">
+                <div class="d-flex align-items-center">
+                    <iconify-icon icon="solar:card-bold-duotone" class="fs-32 text-success me-3"></iconify-icon>
+                    <div>
+                        <h4 class="card-title mb-0 fw-semibold">{{ __('providers.bank_information') }}</h4>
+                        <p class="text-muted mb-0 small">{{ __('providers.bank_info_hint') }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                @if($provider['account_title'] || $provider['account_number'] || $provider['iban'])
+                    <div class="row g-4">
+                        <!-- Account Title -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-muted small">{{ __('providers.account_title') }}</label>
+                            <p class="mb-0 fs-15">{{ $provider['account_title'] ?? __('common.na') }}</p>
+                        </div>
+
+                        <!-- Account Number -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-muted small">{{ __('providers.account_number') }}</label>
+                            <p class="mb-0 fs-15">{{ $provider['account_number'] ?? __('common.na') }}</p>
+                        </div>
+
+                        <!-- IBAN -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-muted small">{{ __('providers.iban') }}</label>
+                            <p class="mb-0 fs-15">{{ $provider['iban'] ?? __('common.na') }}</p>
+                        </div>
+
+                        <!-- Currency -->
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold text-muted small">{{ __('providers.bank_currency') }}</label>
+                            <p class="mb-0 fs-15">{{ $provider['currency'] ?? __('common.na') }}</p>
+                        </div>
+                    </div>
+                @else
+                    <div class="text-center py-4">
+                        <iconify-icon icon="solar:card-broken" class="fs-48 text-muted mb-2"></iconify-icon>
+                        <p class="text-muted mb-0">{{ __('providers.no_bank_info') }}</p>
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Payment Settings Section -->
 <div class="row mt-3">
     <div class="col-lg-12">
@@ -1062,6 +1217,14 @@ document.getElementById('commission_rate').addEventListener('input', function() 
     document.getElementById('example_commission_amount').textContent = commissionAmount.toFixed(2);
     document.getElementById('example_provider_amount').textContent = providerAmount.toFixed(2);
 });
+
+// Image Viewer Function
+function viewImage(imageUrl, imageName) {
+    document.getElementById('imageViewerImg').src = imageUrl;
+    document.getElementById('imageViewerTitle').textContent = imageName;
+    const imageModal = new bootstrap.Modal(document.getElementById('imageViewerModal'));
+    imageModal.show();
+}
 </script>
 @vite(['resources/js/pages/seller-detail.js'])
 @endsection

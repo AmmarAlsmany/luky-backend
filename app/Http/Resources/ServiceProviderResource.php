@@ -13,6 +13,9 @@ class ServiceProviderResource extends JsonResource
             'business_type' => $this->business_type,
             'description' => $this->description,
             'verification_status' => $this->verification_status,
+            'is_verified' => $this->verification_status === 'approved',
+            'is_pending' => $this->verification_status === 'pending',
+            'is_rejected' => $this->verification_status === 'rejected',
             'rejection_reason' => $this->when($this->verification_status === 'rejected', $this->rejection_reason),
             
             'average_rating' => (float) $this->average_rating,
@@ -29,9 +32,16 @@ class ServiceProviderResource extends JsonResource
             
             'working_hours' => $this->working_hours,
             'off_days' => $this->off_days,
-            
+
             'contact' => [
                 'phone' => $this->user->phone ?? null,
+            ],
+
+            'bank_info' => [
+                'account_title' => $this->account_title,
+                'account_number' => $this->account_number,
+                'iban' => $this->iban,
+                'currency' => $this->currency,
             ],
             
             'services' => $this->whenLoaded('services', function () {

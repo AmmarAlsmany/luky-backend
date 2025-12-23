@@ -54,11 +54,14 @@ class BookingResource extends JsonResource
             ],
             
             'client_address' => $this->client_address,
+            'client_latitude' => $this->client_latitude,
+            'client_longitude' => $this->client_longitude,
             'notes' => $this->notes,
             'cancellation_reason' => $this->cancellation_reason,
             'cancelled_by' => $this->cancelled_by,
-            
+
             'confirmed_at' => $this->confirmed_at?->format('Y-m-d H:i:s'),
+            'payment_deadline' => $this->payment_deadline?->format('Y-m-d H:i:s'),
             'completed_at' => $this->completed_at?->format('Y-m-d H:i:s'),
             'cancelled_at' => $this->cancelled_at?->format('Y-m-d H:i:s'),
             'created_at' => $this->created_at->format('Y-m-d H:i:s'),

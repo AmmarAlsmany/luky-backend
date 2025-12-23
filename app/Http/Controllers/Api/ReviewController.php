@@ -54,7 +54,7 @@ class ReviewController extends Controller
 
         DB::beginTransaction();
         try {
-            // Create review with pending approval status
+            // Create review - rating is auto-approved, comment needs admin approval
             $review = Review::create([
                 'booking_id' => $booking->id,
                 'client_id' => $user->id,
@@ -62,22 +62,29 @@ class ReviewController extends Controller
                 'rating' => $validated['rating'],
                 'comment' => $validated['comment'] ?? null,
                 'is_visible' => true,
-                'approval_status' => 'pending', // Reviews need admin approval
+                'approval_status' => 'approved', // Rating is immediately visible
+                'comment_approved' => false, // Comment needs admin approval
             ]);
 
-            // Update provider average rating and total reviews
+            // Update provider average rating and total reviews immediately
             $this->updateProviderRating($booking->provider_id);
 
             DB::commit();
 
+            $message = 'Review submitted successfully. Your rating is now visible.';
+            if (!empty($validated['comment'])) {
+                $message .= ' Your comment will be visible after admin approval.';
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Review submitted successfully. It will be visible after admin approval.',
+                'message' => $message,
                 'data' => [
                     'id' => $review->id,
                     'rating' => $review->rating,
                     'comment' => $review->comment,
                     'approval_status' => $review->approval_status,
+                    'comment_approved' => $review->comment_approved,
                     'created_at' => $review->created_at->format('Y-m-d H:i:s'),
                 ]
             ], 201);
@@ -90,6 +97,7 @@ class ReviewController extends Controller
 
     /**
      * Get reviews for a specific provider (Public)
+     * Shows all ratings immediately, but only approved comments
      */
     public function getProviderReviews(Request $request, int $providerId): JsonResponse
     {
@@ -98,7 +106,7 @@ class ReviewController extends Controller
         $query = Review::with(['client:id,name', 'booking:id,booking_number,booking_date'])
             ->where('provider_id', $providerId)
             ->where('is_visible', true)
-            ->where('approval_status', 'approved');
+            ->where('approval_status', 'approved'); // All ratings are auto-approved
 
         // Filter by rating if provided
         if ($request->has('rating')) {
@@ -117,17 +125,18 @@ class ReviewController extends Controller
                     'average_rating' => (float) $provider->average_rating,
                     'total_reviews' => $provider->total_reviews,
                 ],
-                'reviews' => $reviews->items()->map(function ($review) {
+                'reviews' => collect($reviews->items())->map(function ($review) {
                     return [
                         'id' => $review->id,
                         'rating' => $review->rating,
-                        'comment' => $review->comment,
-                        'client_name' => $review->client->name,
-                        'booking_number' => $review->booking->booking_number,
-                        'booking_date' => $review->booking->booking_date->format('Y-m-d'),
+                        // Only show comment if it's approved by admin
+                        'comment' => $review->comment_approved ? $review->comment : null,
+                        'client_name' => $review->client?->name ?? 'Anonymous',
+                        'booking_number' => $review->booking?->booking_number ?? 'N/A',
+                        'booking_date' => $review->booking?->booking_date?->format('Y-m-d') ?? null,
                         'created_at' => $review->created_at->format('Y-m-d H:i:s'),
                     ];
-                }),
+                })->values(),
                 'pagination' => [
                     'current_page' => $reviews->currentPage(),
                     'last_page' => $reviews->lastPage(),
@@ -211,19 +220,25 @@ class ReviewController extends Controller
                     'total_reviews' => $provider->total_reviews,
                     'rating_breakdown' => $this->getRatingBreakdown($provider->id),
                 ],
-                'reviews' => $reviews->items()->map(function ($review) {
+                'reviews' => collect($reviews->items())->map(function ($review) {
                     return [
                         'id' => $review->id,
                         'rating' => $review->rating,
                         'comment' => $review->comment,
-                        'client_name' => $review->client->name,
-                        'booking_number' => $review->booking->booking_number,
-                        'booking_date' => $review->booking->booking_date->format('Y-m-d'),
+                        'comment_approved' => $review->comment_approved,
+                        'comment_approved_at' => $review->comment_approved_at?->format('Y-m-d H:i:s'),
+                        'client_name' => $review->client?->name ?? 'Unknown Client',
+                        'booking_number' => $review->booking?->booking_number ?? 'N/A',
+                        'booking_date' => $review->booking?->booking_date?->format('Y-m-d') ?? null,
                         'is_visible' => $review->is_visible,
                         'approval_status' => $review->approval_status,
+                        'admin_response' => $review->admin_response,
+                        'responded_at' => $review->responded_at?->format('Y-m-d H:i:s'),
+                        'is_flagged' => $review->is_flagged,
+                        'flag_reason' => $review->flag_reason,
                         'created_at' => $review->created_at->format('Y-m-d H:i:s'),
                     ];
-                }),
+                })->values(),
                 'pagination' => [
                     'current_page' => $reviews->currentPage(),
                     'last_page' => $reviews->lastPage(),
@@ -247,6 +262,93 @@ class ReviewController extends Controller
         ServiceProvider::where('id', $providerId)->update([
             'average_rating' => $stats->average ? round($stats->average, 2) : 0,
             'total_reviews' => $stats->total ?? 0,
+        ]);
+    }
+
+    /**
+     * Provider responds to a review
+     */
+    public function respondToReview(Request $request, int $reviewId): JsonResponse
+    {
+        $user = $request->user();
+        $provider = $user->providerProfile;
+
+        if (!$provider) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Provider profile not found'
+            ], 404);
+        }
+
+        // Validate input
+        $validated = $request->validate([
+            'response' => 'required|string|max:500',
+        ]);
+
+        // Get the review
+        $review = Review::where('id', $reviewId)
+            ->where('provider_id', $provider->id)
+            ->firstOrFail();
+
+        // Update review response
+        $review->update([
+            'admin_response' => $validated['response'],
+            'responded_by' => $user->id,
+            'responded_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Response added successfully',
+            'data' => [
+                'id' => $review->id,
+                'response' => $review->admin_response,
+                'responded_at' => $review->responded_at->format('Y-m-d H:i:s'),
+            ]
+        ]);
+    }
+
+    /**
+     * Provider flags a review as inappropriate
+     */
+    public function flagReview(Request $request, int $reviewId): JsonResponse
+    {
+        $user = $request->user();
+        $provider = $user->providerProfile;
+
+        if (!$provider) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Provider profile not found'
+            ], 404);
+        }
+
+        // Validate input
+        $validated = $request->validate([
+            'reason' => 'required|string|max:500',
+        ]);
+
+        // Get the review
+        $review = Review::where('id', $reviewId)
+            ->where('provider_id', $provider->id)
+            ->firstOrFail();
+
+        // Flag the review
+        $review->update([
+            'is_flagged' => true,
+            'flag_reason' => $validated['reason'],
+            'flagged_by' => $user->id,
+            'flagged_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Review flagged for admin review',
+            'data' => [
+                'id' => $review->id,
+                'is_flagged' => $review->is_flagged,
+                'flagged_at' => $review->flagged_at->format('Y-m-d H:i:s'),
+            ]
         ]);
     }
 

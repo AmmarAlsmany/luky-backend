@@ -10,14 +10,17 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Notifications\Notification;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use App\Services\PhoneNumberService;
 use App\Models\Review;
 use App\Models\ServiceCategory;
 
-class User extends Authenticatable
+class User extends Authenticatable implements HasMedia
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable, HasRoles, SoftDeletes;
+    use HasApiTokens, HasFactory, Notifiable, HasRoles, SoftDeletes, InteractsWithMedia;
 
     /**
      * The attributes that are mass assignable.
@@ -84,6 +87,14 @@ class User extends Authenticatable
     }
 
     public function providerProfile()
+    {
+        return $this->hasOne(ServiceProvider::class);
+    }
+
+    /**
+     * Alias for providerProfile
+     */
+    public function serviceProvider()
     {
         return $this->hasOne(ServiceProvider::class);
     }
@@ -165,6 +176,16 @@ class User extends Authenticatable
         return $this->hasMany(Notification::class);
     }
 
+    public function walletTransactions()
+    {
+        return $this->hasMany(WalletTransaction::class);
+    }
+
+    public function walletDeposits()
+    {
+        return $this->hasMany(WalletDeposit::class);
+    }
+
     // Scopes
     public function scopeClients($query)
     {
@@ -202,18 +223,66 @@ class User extends Authenticatable
     }
 
     /**
+     * Register media collections for user avatar
+     */
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('avatar')
+            ->singleFile() // Only one avatar per user
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/jpg']);
+    }
+
+    /**
+     * Register media conversions for automatic avatar optimization
+     * Optimizes avatar images to reduce size and improve loading speed
+     */
+    public function registerMediaConversions(?Media $media = null): void
+    {
+        // Optimized version - 300x300px for profile display
+        // Perfect size for avatars, reduces file size significantly
+        $this->addMediaConversion('optimized')
+            ->width(300)
+            ->height(300)
+            ->sharpen(10)
+            ->quality(85)
+            ->format('jpg')
+            ->performOnCollections('avatar')
+            ->nonQueued(); // Process immediately
+
+        // Thumbnail version - 100x100px for small displays (lists, etc.)
+        $this->addMediaConversion('thumb')
+            ->width(100)
+            ->height(100)
+            ->sharpen(10)
+            ->quality(80)
+            ->format('jpg')
+            ->performOnCollections('avatar')
+            ->nonQueued();
+    }
+
+    /**
      * Get avatar URL with gender-based default
+     * Returns optimized version if available for better performance
      */
     public function getAvatarUrlAttribute()
     {
-        // If user has uploaded avatar, use it
+        // First check if using Spatie Media Library
+        $media = $this->getFirstMedia('avatar');
+        if ($media) {
+            // Return optimized version if available, otherwise original
+            return $media->hasGeneratedConversion('optimized')
+                ? $media->getUrl('optimized')
+                : $media->getUrl();
+        }
+
+        // Fallback to legacy avatar field for backwards compatibility
         if ($this->avatar && \Storage::disk('public')->exists($this->avatar)) {
             return \Storage::url($this->avatar);
         }
 
         // Use gender-based default avatar
-        $defaultAvatar = $this->gender === 'female' 
-            ? 'images/default-avatar-female.svg' 
+        $defaultAvatar = $this->gender === 'female'
+            ? 'images/default-avatar-female.svg'
             : 'images/default-avatar-male.svg';
 
         return asset($defaultAvatar);

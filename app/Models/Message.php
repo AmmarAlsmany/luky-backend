@@ -4,9 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
-class Message extends Model
+class Message extends Model implements HasMedia
 {
+    use InteractsWithMedia;
     protected $fillable = [
         'conversation_id',
         'sender_id',
@@ -83,10 +87,59 @@ class Message extends Model
     }
 
     /**
+     * Register media collections for chat images
+     */
+    public function registerMediaCollections(): void
+    {
+        $this->addMediaCollection('chat_image')
+            ->singleFile() // Only one image per message
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/jpg', 'image/gif']);
+    }
+
+    /**
+     * Register media conversions for automatic image optimization
+     * Optimizes chat images to reduce size and improve loading speed
+     */
+    public function registerMediaConversions(?Media $media = null): void
+    {
+        // Optimized version - Maximum 1200px, compressed to 85% quality
+        // Reduces file size by 80-95% while maintaining good quality for chat
+        $this->addMediaConversion('optimized')
+            ->width(1200)
+            ->height(1200)
+            ->sharpen(10)
+            ->quality(85)
+            ->format('jpg')
+            ->performOnCollections('chat_image')
+            ->nonQueued(); // Process immediately
+
+        // Thumbnail version - 300px for message previews
+        $this->addMediaConversion('thumb')
+            ->width(300)
+            ->height(300)
+            ->sharpen(10)
+            ->quality(80)
+            ->format('jpg')
+            ->performOnCollections('chat_image')
+            ->nonQueued();
+    }
+
+    /**
      * Get the full image URL
+     * Returns optimized version if available for better performance
      */
     public function getImageUrlAttribute(): ?string
     {
+        // First check if using Spatie Media Library
+        $media = $this->getFirstMedia('chat_image');
+        if ($media) {
+            // Return optimized version if available, otherwise original
+            return $media->hasGeneratedConversion('optimized')
+                ? $media->getUrl('optimized')
+                : $media->getUrl();
+        }
+
+        // Fallback to legacy image_path for backwards compatibility
         if (!$this->image_path) {
             return null;
         }

@@ -269,17 +269,18 @@ class ChatController extends Controller
 
         DB::beginTransaction();
         try {
-            // Store image
-            $imagePath = $request->file('image')->store('chat-images', 'public');
-
-            // Create message
+            // Create message first
             $message = Message::create([
                 'conversation_id' => $conversationId,
                 'sender_id' => $user->id,
                 'sender_type' => $userType,
                 'message_type' => 'image',
-                'image_path' => $imagePath,
             ]);
+
+            // Store and optimize image using Spatie Media Library
+            // This automatically creates optimized (1200px @ 85%) and thumb (300px @ 80%) versions
+            $message->addMediaFromRequest('image')
+                ->toMediaCollection('chat_image');
 
             // Update conversation
             $recipientType = $userType === 'client' ? 'provider' : 'client';

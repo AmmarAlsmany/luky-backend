@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\DeviceToken;
+use App\Jobs\SendFCMTopicNotificationJob;
 use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Factory;
 use Kreait\Firebase\Messaging\CloudMessage;
@@ -316,9 +317,6 @@ class FCMService
      */
     public function sendPaymentCompleted($booking, $payment): bool
     {
-        // Add 2-second delay to prevent race condition (mobile needs time to subscribe)
-        sleep(2);
-
         $userId = $booking->client_id;
         $bookingId = $booking->id;
         $topic = "user_{$userId}_booking_{$bookingId}_payment";
@@ -342,13 +340,17 @@ class FCMService
             'refresh_notifications' => 'true',
         ];
 
-        Log::info("Sending payment completed FCM to topic: {$topic}", [
+        Log::info("Dispatching payment completed FCM job (2s delay) to topic: {$topic}", [
             'booking_id' => $bookingId,
             'payment_id' => $payment->id,
             'amount' => $payment->amount,
         ]);
 
-        return $this->sendToTopic($topic, $title, $body, $data);
+        // Dispatch job with 2-second delay (non-blocking, allows mobile to subscribe)
+        SendFCMTopicNotificationJob::dispatch($topic, $title, $body, $data)
+            ->delay(now()->addSeconds(2));
+
+        return true;
     }
 
     /**
@@ -361,9 +363,6 @@ class FCMService
      */
     public function sendPaymentFailed($booking, $payment, string $errorMessage = 'Payment processing failed'): bool
     {
-        // Add 2-second delay to prevent race condition
-        sleep(2);
-
         $userId = $booking->client_id;
         $bookingId = $booking->id;
         $topic = "user_{$userId}_booking_{$bookingId}_payment";
@@ -382,13 +381,17 @@ class FCMService
             'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
         ];
 
-        Log::info("Sending payment failed FCM to topic: {$topic}", [
+        Log::info("Dispatching payment failed FCM job (2s delay) to topic: {$topic}", [
             'booking_id' => $bookingId,
             'payment_id' => $payment->id,
             'error' => $errorMessage,
         ]);
 
-        return $this->sendToTopic($topic, $title, $body, $data);
+        // Dispatch job with 2-second delay (non-blocking, allows mobile to subscribe)
+        SendFCMTopicNotificationJob::dispatch($topic, $title, $body, $data)
+            ->delay(now()->addSeconds(2));
+
+        return true;
     }
 
     /**

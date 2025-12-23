@@ -73,6 +73,11 @@
                                 @endif
                             </a>
                         </li>
+                        <li class="sub-nav-item">
+                            <a class="sub-nav-link" href="{{ route('providers.pendingChanges') }}">
+                                {{ __('common.pending_changes') }}
+                            </a>
+                        </li>
                     </ul>
                 </div>
             </li>

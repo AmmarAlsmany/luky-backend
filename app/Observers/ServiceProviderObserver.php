@@ -30,6 +30,9 @@ class ServiceProviderObserver
                 'user_id' => $provider->user_id,
             ]
         );
+
+        // Clear provider caches
+        \App\Services\CacheService::clearProviders();
     }
 
     /**
@@ -61,5 +64,26 @@ class ServiceProviderObserver
                 );
             }
         }
+
+        // Clear provider caches if important fields changed
+        if ($provider->isDirty(['is_featured', 'average_rating', 'is_active', 'verification_status', 'city_id'])) {
+            \App\Services\CacheService::clearProviders();
+        }
+    }
+
+    /**
+     * Handle the ServiceProvider "deleted" event.
+     */
+    public function deleted(ServiceProvider $provider): void
+    {
+        \App\Services\CacheService::clearProviders();
+    }
+
+    /**
+     * Handle the ServiceProvider "restored" event.
+     */
+    public function restored(ServiceProvider $provider): void
+    {
+        \App\Services\CacheService::clearProviders();
     }
 }

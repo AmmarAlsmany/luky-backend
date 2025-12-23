@@ -462,18 +462,35 @@ class PaymentController extends Controller
 
     /**
      * Pay with wallet/balance
+     * Supports both:
+     * - POST /bookings/{id}/pay-with-wallet (booking_id in URL)
+     * - POST /payments/wallet (booking_id in body) - for backward compatibility
      */
-    public function payWithWallet(Request $request): JsonResponse
+    public function payWithWallet(Request $request, $id = null): JsonResponse
     {
         Log::info('=== WALLET PAYMENT STARTED ===');
         Log::info('Request data:', $request->all());
+        Log::info('URL param id:', ['id' => $id]);
 
-        $request->validate([
-            'booking_id' => 'required|exists:bookings,id',
-        ]);
+        // Get booking_id from URL parameter or request body
+        $bookingId = $id ?? $request->input('booking_id');
+
+        if (!$bookingId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking ID is required'
+            ], 400);
+        }
 
         $user = $request->user();
-        $booking = Booking::with(['client', 'provider'])->findOrFail($request->booking_id);
+        $booking = Booking::with(['client', 'provider'])->find($bookingId);
+
+        if (!$booking) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking not found'
+            ], 404);
+        }
 
         Log::info('Booking details:', [
             'id' => $booking->id,
@@ -501,7 +518,7 @@ class PaymentController extends Controller
         if ($booking->payment_status !== 'pending') {
             return response()->json([
                 'success' => false,
-                'message' => 'Payment already processed for this booking.'
+                'message' => 'Booking has already been paid'
             ], 400);
         }
 
@@ -509,16 +526,40 @@ class PaymentController extends Controller
         // Note: Add wallet_balance column to users table if not exists
         $userBalance = $user->wallet_balance ?? 0;
         if ($userBalance < $booking->total_amount) {
+            $shortfall = $booking->total_amount - $userBalance;
             return response()->json([
                 'success' => false,
-                'message' => 'Insufficient wallet balance.',
-                'current_balance' => $userBalance,
-                'required_amount' => $booking->total_amount
+                'message' => 'Insufficient wallet balance',
+                'data' => [
+                    'required_amount' => (float) $booking->total_amount,
+                    'current_balance' => (float) $userBalance,
+                    'shortfall' => (float) $shortfall,
+                ]
             ], 400);
         }
 
         DB::beginTransaction();
         try {
+            $balanceBefore = $userBalance;
+            $balanceAfter = $userBalance - $booking->total_amount;
+
+            // Create wallet transaction record
+            $walletTransaction = \App\Models\WalletTransaction::create([
+                'user_id' => $user->id,
+                'type' => 'payment',
+                'amount' => $booking->total_amount,
+                'description' => "Payment for booking #{$booking->id}",
+                'reference_number' => 'BOOK-' . $booking->id,
+                'related_id' => $booking->id,
+                'related_type' => 'booking',
+                'balance_before' => $balanceBefore,
+                'balance_after' => $balanceAfter,
+                'metadata' => [
+                    'booking_id' => $booking->id,
+                    'provider_id' => $booking->provider_id,
+                ],
+            ]);
+
             // Deduct from wallet
             $user->decrement('wallet_balance', $booking->total_amount);
 
@@ -533,8 +574,9 @@ class PaymentController extends Controller
                 'status' => 'completed',
                 'gateway_response' => [
                     'payment_method' => 'wallet',
-                    'balance_before' => $userBalance,
-                    'balance_after' => $userBalance - $booking->total_amount,
+                    'balance_before' => $balanceBefore,
+                    'balance_after' => $balanceAfter,
+                    'transaction_id' => $walletTransaction->id,
                 ],
                 'paid_at' => now(),
             ]);
@@ -568,12 +610,12 @@ class PaymentController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Payment completed successfully',
+                'message' => 'Booking paid successfully with wallet',
                 'data' => [
                     'booking_id' => $booking->id,
-                    'payment_id' => $payment->id,
-                    'amount_paid' => $booking->total_amount,
-                    'new_balance' => $userBalance - $booking->total_amount,
+                    'transaction_id' => $walletTransaction->id,
+                    'amount_paid' => (float) $booking->total_amount,
+                    'new_balance' => (float) ($userBalance - $booking->total_amount),
                     'payment_status' => 'paid',
                 ]
             ]);

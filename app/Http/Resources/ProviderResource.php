@@ -78,6 +78,10 @@ class ProviderResource extends JsonResource
 
             // Verification
             'verification_status' => $this->verification_status,
+            'is_verified' => $this->verification_status === 'approved',
+            'is_pending' => $this->verification_status === 'pending',
+            'is_rejected' => $this->verification_status === 'rejected',
+            'rejection_reason' => $this->when($this->verification_status === 'rejected', $this->rejection_reason),
             'verified_at' => $this->verified_at?->format('Y-m-d H:i:s'),
             
             'created_at' => $this->created_at->format('Y-m-d H:i:s')

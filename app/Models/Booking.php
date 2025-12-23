@@ -31,6 +31,7 @@ class Booking extends Model
         'cancellation_reason',
         'cancelled_by',
         'confirmed_at',
+        'payment_deadline',
         'completed_at',
         'cancelled_at',
         'promo_code_id'
@@ -48,6 +49,7 @@ class Booking extends Model
         'client_latitude' => 'decimal:8',
         'client_longitude' => 'decimal:8',
         'confirmed_at' => 'datetime',
+        'payment_deadline' => 'datetime',
         'completed_at' => 'datetime',
         'cancelled_at' => 'datetime',
     ];

@@ -104,14 +104,17 @@ class ServiceCategoryController extends Controller
         // Handle checkbox - if not present, it means unchecked
         $validated['is_active'] = $request->has('is_active') ? true : false;
 
-        // Handle image upload if provided
-        if ($request->hasFile('image')) {
-            // TODO: Implement image upload logic
-            // For now, we'll skip this
-            unset($validated['image']);
-        }
+        // Remove image from validated data (handled separately)
+        unset($validated['image']);
 
         $category = ServiceCategory::create($validated);
+
+        // Handle image upload if provided using Spatie Media Library
+        // This automatically creates optimized (200x200) and thumb (80x80) versions
+        if ($request->hasFile('image')) {
+            $category->addMediaFromRequest('image')
+                ->toMediaCollection('category_icon');
+        }
 
         return redirect()->route('categories.index')
             ->with('success', 'Category created successfully');
@@ -183,13 +186,17 @@ class ServiceCategoryController extends Controller
         // Handle checkbox - if not present, it means unchecked
         $validated['is_active'] = $request->has('is_active') ? true : false;
 
-        // Handle image upload if provided
-        if ($request->hasFile('image')) {
-            // TODO: Implement image upload logic
-            // For now, we'll skip this
-        }
+        // Remove image from validated data (handled separately)
+        unset($validated['image']);
 
         $category->update($validated);
+
+        // Handle image upload if provided using Spatie Media Library
+        // This automatically creates optimized (200x200) and thumb (80x80) versions
+        if ($request->hasFile('image')) {
+            $category->addMediaFromRequest('image')
+                ->toMediaCollection('category_icon');
+        }
 
         return redirect()->route('categories.index')
             ->with('success', 'Category updated successfully');

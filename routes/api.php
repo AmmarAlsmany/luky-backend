@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\UserAddressController;
 use App\Http\Controllers\Api\PromoCodeController;
 use App\Http\Controllers\Api\BannerController;
+use App\Http\Controllers\Api\WalletController;
 
 // Public routes - No authentication required
 Route::prefix('v1')->group(function () {
@@ -63,6 +64,8 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active', 'validate.app.type'])
     // User Profile Management
     Route::get('/user/profile', [AuthController::class, 'profile']);
     Route::put('/user/profile', [AuthController::class, 'updateProfile']);
+    Route::post('/user/avatar', [AuthController::class, 'uploadAvatar']);
+    Route::delete('/user/avatar', [AuthController::class, 'deleteAvatar']);
     Route::delete('/user/account', [AuthController::class, 'deleteAccount']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
 
@@ -75,6 +78,10 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active', 'validate.app.type'])
         // Profile
         Route::get('/provider/profile', [ProviderController::class, 'getProfile']);
         Route::put('/provider/profile', [ProviderController::class, 'updateProfile']);
+        Route::get('/provider/pending-changes', [ProviderController::class, 'getPendingChanges']);
+
+        // Bank Information
+        Route::put('/provider/bank-info', [ProviderController::class, 'updateBankInfo']);
 
         // Documents
         Route::post('/provider/documents', [ProviderController::class, 'uploadDocuments']);
@@ -92,6 +99,16 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active', 'validate.app.type'])
 
         // Analytics
         Route::get('/provider/analytics', [ProviderController::class, 'getAnalytics']);
+        Route::get('/provider/daily-stats', [ProviderController::class, 'getDailyBookingStats']);
+
+        // Clients & Notifications
+        Route::get('/provider/clients', [ProviderController::class, 'getClients']);
+        Route::post('/provider/send-notification', [ProviderController::class, 'sendNotificationToClients']);
+
+        // Withdrawals
+        Route::get('/provider/balance', [ProviderController::class, 'getAvailableBalance']);
+        Route::post('/provider/withdrawals', [ProviderController::class, 'requestWithdrawal']);
+        Route::get('/provider/withdrawals', [ProviderController::class, 'getWithdrawalHistory']);
     });
 
     // Client booking routes
@@ -101,11 +118,13 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active', 'validate.app.type'])
         Route::get('/bookings/{id}', [BookingController::class, 'show']);
         Route::get('/bookings/{id}/cancellation-preview', [BookingController::class, 'previewCancellation']);
         Route::put('/bookings/{id}/cancel', [BookingController::class, 'cancelBooking']);
+        Route::post('/bookings/{id}/pay-with-wallet', [PaymentController::class, 'payWithWallet'])->middleware('throttle:10,1');
     });
 
     // Provider booking routes
     Route::middleware(['role:provider'])->group(function () {
         Route::get('/provider/bookings', [BookingController::class, 'providerBookings']);
+        Route::get('/provider/bookings/{id}', [BookingController::class, 'show']);
         Route::put('/provider/bookings/{id}/accept', [BookingController::class, 'acceptBooking']);
         Route::put('/provider/bookings/{id}/reject', [BookingController::class, 'rejectBooking']);
         Route::get('/provider/schedule', [BookingController::class, 'providerSchedule']);
@@ -120,6 +139,8 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active', 'validate.app.type'])
     // Provider review routes
     Route::middleware(['role:provider'])->group(function () {
         Route::get('/provider/reviews', [ReviewController::class, 'getReceivedReviews']);
+        Route::post('/provider/reviews/{id}/respond', [ReviewController::class, 'respondToReview']);
+        Route::post('/provider/reviews/{id}/flag', [ReviewController::class, 'flagReview']);
     });
 
     // Client payment routes (Rate Limited)
@@ -128,6 +149,14 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active', 'validate.app.type'])
         Route::get('/payments/status', [PaymentController::class, 'getPaymentStatus']);
         Route::post('/payments/initiate', [PaymentController::class, 'initiatePayment'])->middleware('throttle:10,1');
         Route::post('/payments/wallet', [PaymentController::class, 'payWithWallet'])->middleware('throttle:10,1');
+    });
+
+    // Wallet routes (all authenticated users)
+    Route::middleware(['role:client'])->group(function () {
+        Route::get('/wallet', [WalletController::class, 'index']);
+        Route::get('/wallet/transactions', [WalletController::class, 'transactions']);
+        Route::post('/wallet/deposit', [WalletController::class, 'deposit'])->middleware('throttle:5,1');
+        Route::post('/wallet/verify-payment', [WalletController::class, 'verifyPayment']);
     });
 
     // Notification routes (all authenticated users)
@@ -188,6 +217,9 @@ Route::post('/v1/payments/webhook', [PaymentController::class, 'webhook']);
 // Payment callback (no auth - user returns here after payment, works for both test & live)
 Route::get('/v1/payments/callback', [PaymentController::class, 'paymentCallback']);
 
+// Wallet payment callback (no auth - user returns here after wallet deposit)
+Route::get('/v1/wallet/callback', [WalletController::class, 'callback']);
+
 // ============================================
 // ADMIN DASHBOARD APIs
 // ============================================
@@ -238,6 +270,12 @@ Route::prefix('admin')->group(function () {
         Route::get('/providers/{id}/reviews', [App\Http\Controllers\Api\Admin\ProviderManagementController::class, 'reviews']);
         Route::get('/providers/{id}/activity-logs', [App\Http\Controllers\Api\Admin\ProviderManagementController::class, 'activityLogs']);
 
+        // Provider Profile Change Requests
+        Route::get('/providers/pending-changes/list', [App\Http\Controllers\Api\Admin\ProviderManagementController::class, 'getPendingChanges']);
+        Route::get('/providers/pending-changes/{id}', [App\Http\Controllers\Api\Admin\ProviderManagementController::class, 'getPendingChangeDetails']);
+        Route::post('/providers/pending-changes/{id}/approve', [App\Http\Controllers\Api\Admin\ProviderManagementController::class, 'approvePendingChange']);
+        Route::post('/providers/pending-changes/{id}/reject', [App\Http\Controllers\Api\Admin\ProviderManagementController::class, 'rejectPendingChange']);
+
         // ===================================
         // EMPLOYEE MANAGEMENT
         // ===================================
@@ -256,6 +294,11 @@ Route::prefix('admin')->group(function () {
         // Roles & Permissions
         Route::get('/roles', [App\Http\Controllers\Api\Admin\EmployeeController::class, 'getRoles']);
         Route::get('/permissions', [App\Http\Controllers\Api\Admin\EmployeeController::class, 'getPermissions']);
+
+        // ===================================
+        // BOOKING MANAGEMENT
+        // ===================================
+        Route::put('/bookings/{id}/cancel', [BookingController::class, 'cancelBooking']);
 
         // ===================================
         // PAYMENT SETTINGS

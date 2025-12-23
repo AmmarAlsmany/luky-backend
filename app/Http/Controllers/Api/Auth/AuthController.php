@@ -150,6 +150,64 @@ class AuthController extends Controller
     }
 
     /**
+     * Upload or update user avatar with automatic optimization
+     */
+    public function uploadAvatar(Request $request): JsonResponse
+    {
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg|max:5120', // 5MB max
+        ]);
+
+        try {
+            $user = $request->user();
+
+            // Store and optimize avatar using Spatie Media Library
+            // This automatically creates optimized (300x300 @ 85%) and thumb (100x100 @ 80%) versions
+            $user->addMediaFromRequest('avatar')
+                ->toMediaCollection('avatar');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Avatar uploaded successfully',
+                'data' => [
+                    'avatar_url' => $user->fresh()->avatar_url
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload avatar: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete user avatar
+     */
+    public function deleteAvatar(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+
+            // Delete avatar from media library
+            $user->clearMediaCollection('avatar');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Avatar deleted successfully',
+                'data' => [
+                    'avatar_url' => $user->fresh()->avatar_url // Returns default avatar
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete avatar: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Logout user
      */
     public function logout(Request $request): JsonResponse

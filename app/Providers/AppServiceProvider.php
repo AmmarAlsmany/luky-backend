@@ -11,11 +11,15 @@ use App\Models\Review;
 use App\Models\User;
 use App\Models\Payment;
 use App\Models\ServiceProvider as ServiceProviderModel;
+use App\Models\ServiceCategory;
+use App\Models\City;
 use App\Observers\BookingObserver;
 use App\Observers\ReviewObserver;
 use App\Observers\UserObserver;
 use App\Observers\PaymentObserver;
 use App\Observers\ServiceProviderObserver;
+use App\Observers\ServiceCategoryObserver;
+use App\Observers\CityObserver;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -58,6 +62,8 @@ class AppServiceProvider extends ServiceProvider
         User::observe(UserObserver::class);
         Payment::observe(PaymentObserver::class);
         ServiceProviderModel::observe(ServiceProviderObserver::class);
+        ServiceCategory::observe(ServiceCategoryObserver::class);
+        City::observe(CityObserver::class);
 
         // Register Blade directive for localized names
         Blade::directive('localizedName', function ($expression) {

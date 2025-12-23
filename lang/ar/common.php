@@ -147,6 +147,7 @@ return [
     'general' => 'عام',
     'list' => 'قائمة',
     'pending_approvals' => 'قيد الموافقة',
+    'pending_changes' => 'التعديلات قيد المراجعة',
     'all_bookings' => 'كل الحجوزات',
     'all_services' => 'كل الخدمات',
     'payment_management' => 'إدارة المدفوعات',

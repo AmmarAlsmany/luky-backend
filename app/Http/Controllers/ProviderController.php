@@ -9,16 +9,21 @@ use App\Models\Booking;
 use App\Models\City;
 use App\Models\Service;
 use App\Services\SmsService;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use App\Models\ProviderPendingChange;
 
 class ProviderController extends Controller
 {
     protected SmsService $smsService;
+    protected NotificationService $notificationService;
 
-    public function __construct(SmsService $smsService)
+    public function __construct(SmsService $smsService, NotificationService $notificationService)
     {
         $this->smsService = $smsService;
+        $this->notificationService = $notificationService;
     }
     /**
      * Display provider list
@@ -149,7 +154,7 @@ class ProviderController extends Controller
      */
     public function pending()
     {
-        $providers = ServiceProvider::with(['user', 'city', 'documents'])
+        $providers = ServiceProvider::with(['user', 'city', 'documents', 'media'])
             ->where('verification_status', 'pending')
             ->orderBy('created_at', 'desc')
             ->get();
@@ -158,9 +163,12 @@ class ProviderController extends Controller
         $providers = $providers->map(function ($provider) {
             $user = $provider->user;
 
-            // Transform documents for frontend
-            $documents = $provider->documents->map(function ($doc) {
-                return [
+            // Collect ALL files: documents + logo + building + gallery
+            $allFiles = [];
+
+            // 1. Add license/registration documents from provider_documents table
+            foreach ($provider->documents as $doc) {
+                $allFiles[] = [
                     'id' => $doc->id,
                     'name' => $doc->original_name ?? basename($doc->file_path),
                     'file_name' => $doc->original_name,
@@ -171,7 +179,58 @@ class ProviderController extends Controller
                     'verification_status' => $doc->verification_status,
                     'mime_type' => $doc->mime_type,
                 ];
-            })->toArray();
+            }
+
+            // 2. Add logo from media library
+            $logo = $provider->getFirstMedia('logo');
+            if ($logo) {
+                $allFiles[] = [
+                    'id' => 'logo_' . $logo->id,
+                    'name' => $logo->file_name,
+                    'file_name' => $logo->file_name,
+                    'url' => $logo->getUrl(),
+                    'file_url' => $logo->getUrl(),
+                    'type' => 'Logo',
+                    'document_type' => 'logo',
+                    'verification_status' => 'pending',
+                    'mime_type' => $logo->mime_type,
+                ];
+            }
+
+            // 3. Add building image from media library
+            $buildingImage = $provider->getFirstMedia('building_image');
+            if ($buildingImage) {
+                $allFiles[] = [
+                    'id' => 'building_' . $buildingImage->id,
+                    'name' => $buildingImage->file_name,
+                    'file_name' => $buildingImage->file_name,
+                    'url' => $buildingImage->getUrl(),
+                    'file_url' => $buildingImage->getUrl(),
+                    'type' => 'Building Image',
+                    'document_type' => 'building_image',
+                    'verification_status' => 'pending',
+                    'mime_type' => $buildingImage->mime_type,
+                ];
+            }
+
+            // 4. Add gallery images from media library
+            $galleryImages = $provider->getMedia('gallery');
+            foreach ($galleryImages as $index => $galleryImage) {
+                $allFiles[] = [
+                    'id' => 'gallery_' . $galleryImage->id,
+                    'name' => $galleryImage->file_name,
+                    'file_name' => $galleryImage->file_name,
+                    'url' => $galleryImage->getUrl(),
+                    'file_url' => $galleryImage->getUrl(),
+                    'type' => 'Gallery Photo ' . ($index + 1),
+                    'document_type' => 'gallery',
+                    'verification_status' => 'pending',
+                    'mime_type' => $galleryImage->mime_type,
+                ];
+            }
+
+            // Debug: Log all files count
+            \Log::info('Provider ' . $provider->id . ' has ' . count($allFiles) . ' total files (documents + media)');
 
             return [
                 'id' => $provider->id,
@@ -181,13 +240,16 @@ class ProviderController extends Controller
                 'phone' => $user->phone ?? 'N/A',
                 'avatar_url' => $user->avatar ?? null,
                 'avatar' => $user->avatar ?? null,
+                'logo_url' => $provider->logo_url ?? null,
                 'business_name' => $provider->business_name,
                 'business_type' => $provider->business_type,
                 'verification_status' => $provider->verification_status,
                 'city' => $provider->city,
                 'created_at' => $provider->created_at,
-                'documents' => $documents,
-                'providerProfile' => $provider, // For backward compatibility
+                'documents' => $allFiles, // Now includes ALL files: documents + logo + building + gallery
+                'providerProfile' => [
+                    'logo_url' => $provider->logo_url ?? null,
+                ],
             ];
         });
 
@@ -404,13 +466,17 @@ class ProviderController extends Controller
             'working_hours' => $providerProfile->working_hours ?? [],
             'off_days' => $providerProfile->off_days ?? [],
             'commission_rate' => $providerProfile->commission_rate ?? 15,
+            'account_title' => $providerProfile->account_title,
+            'account_number' => $providerProfile->account_number,
+            'iban' => $providerProfile->iban,
+            'currency' => $providerProfile->currency,
             'is_active' => $providerProfile->is_active,
             'city' => $providerProfile->city ? [
                 'id' => $providerProfile->city->id,
                 'name_en' => $providerProfile->city->name_en ?? '',
                 'name_ar' => $providerProfile->city->name_ar ?? '',
             ] : null,
-            'documents' => $providerProfile->documents ?? [],
+            'documents' => $this->getAllProviderFiles($providerProfile),
             'contract' => $activeContract ? [
                 'contract_number' => $activeContract->contract_number,
                 'start_date' => $activeContract->start_date->format('Y-m-d'),
@@ -597,43 +663,39 @@ class ProviderController extends Controller
                 ]);
                 // Status is already set via is_active above
 
-                // Send approval notification
-                \App\Models\Notification::create([
-                    'user_id' => $provider->id,
-                    'type' => 'approval',
-                    'title' => 'Provider Account Approved',
-                    'body' => 'Congratulations! Your provider account has been approved and is now active.',
-                    'data' => [
-                        'notes' => $validated['notes'] ?? null,
-                    ],
-                    'is_read' => false,
-                    'is_sent' => true,
-                ]);
+                // Send push notification via FCM
+                $this->notificationService->sendProviderApproved(
+                    $provider->id,
+                    $providerProfile->business_name
+                );
 
                 $message = 'Provider approved successfully';
             } else {
-                $providerProfile->update([
-                    'verification_status' => 'rejected',
-                    'rejection_reason' => $validated['notes'] ?? 'Application rejected',
-                    'is_active' => false,
-                    'verified_at' => null,
-                ]);
-                $provider->update(['status' => 'inactive']);
-
-                // Send rejection notification
-                \App\Models\Notification::create([
+                // Log rejection details before deletion
+                \Log::info('=== PROVIDER REJECTED AND DELETED ===', [
+                    'provider_id' => $providerProfile->id,
                     'user_id' => $provider->id,
-                    'type' => 'rejection',
-                    'title' => 'Provider Application Status',
-                    'body' => 'Your provider application has been reviewed. Please check for details.',
-                    'data' => [
-                        'reason' => $validated['notes'] ?? 'Application rejected',
-                    ],
-                    'is_read' => false,
-                    'is_sent' => true,
+                    'business_name' => $providerProfile->business_name,
+                    'email' => $provider->email,
+                    'phone' => $provider->phone,
+                    'rejection_reason' => $validated['notes'] ?? 'Application rejected',
+                    'admin_id' => auth()->user()->id,
                 ]);
 
-                $message = 'Provider rejected';
+                // Send rejection notification before deleting
+                $this->notificationService->sendProviderRejected(
+                    $provider->id,
+                    $providerProfile->business_name,
+                    $validated['notes'] ?? ''
+                );
+
+                // Hard delete provider profile (permanently remove from database)
+                $providerProfile->forceDelete();
+
+                // Hard delete user account to free up email and phone (permanently remove)
+                $provider->forceDelete();
+
+                $message = 'Provider rejected and account permanently deleted. Email and phone are now available for re-registration.';
             }
 
             DB::commit();
@@ -1002,5 +1064,181 @@ class ProviderController extends Controller
                 'message' => 'Failed to delete provider: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Show pending profile changes page
+     */
+    public function pendingChanges()
+    {
+        try {
+            $pendingChanges = ProviderPendingChange::with(['provider.user'])
+                ->where('status', 'pending')
+                ->orderBy('created_at', 'asc')
+                ->get()
+                ->map(function ($change) {
+                    return [
+                        'id' => $change->id,
+                        'provider_id' => $change->provider_id,
+                        'provider_name' => $change->provider && $change->provider->user ? $change->provider->user->name : 'N/A',
+                        'business_name' => $change->provider ? $change->provider->business_name : 'N/A',
+                        'changed_fields' => $change->changed_fields,
+                        'old_values' => $change->old_values,
+                        'status' => $change->status,
+                        'created_at' => $change->created_at,
+                        'updated_at' => $change->updated_at,
+                    ];
+                });
+
+            return view('provider.pending-changes', [
+                'pendingChanges' => $pendingChanges
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error loading pending changes: ' . $e->getMessage());
+            return view('provider.pending-changes', [
+                'pendingChanges' => []
+            ]);
+        }
+    }
+
+    /**
+     * Approve pending profile change
+     */
+    public function approvePendingChange(Request $request, $id)
+    {
+        $admin = $request->user();
+
+        DB::beginTransaction();
+        try {
+            $change = ProviderPendingChange::with('provider')->findOrFail($id);
+
+            if ($change->status !== 'pending') {
+                return redirect()->route('providers.pendingChanges')
+                    ->with('error', 'This change request has already been processed.');
+            }
+
+            // Apply the changes to the provider profile
+            $change->provider->update($change->changed_fields);
+
+            // Mark the change as approved
+            $change->update([
+                'status' => 'approved',
+                'reviewed_by' => $admin->id,
+                'reviewed_at' => now(),
+                'admin_notes' => $request->input('admin_notes'),
+            ]);
+
+            DB::commit();
+
+            \Log::info('=== PROVIDER CHANGE APPROVED ===', [
+                'change_id' => $change->id,
+                'provider_id' => $change->provider_id,
+                'approved_by' => $admin->id,
+            ]);
+
+            // Send notification to provider
+            $this->notificationService->sendProfileChangeApproved(
+                $change->provider->user_id,
+                $change->provider->business_name
+            );
+
+            return redirect()->route('providers.pendingChanges')
+                ->with('success', 'Profile changes approved successfully');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Error approving pending change: ' . $e->getMessage());
+            return redirect()->route('providers.pendingChanges')
+                ->with('error', 'An error occurred while approving the changes');
+        }
+    }
+
+    /**
+     * Reject pending profile change
+     */
+    public function rejectPendingChange(Request $request, $id)
+    {
+        $request->validate([
+            'rejection_reason' => 'required|string|max:1000'
+        ]);
+
+        $admin = $request->user();
+
+        try {
+            $change = ProviderPendingChange::with('provider')->findOrFail($id);
+
+            if ($change->status !== 'pending') {
+                return redirect()->route('providers.pendingChanges')
+                    ->with('error', 'This change request has already been processed.');
+            }
+
+            $change->update([
+                'status' => 'rejected',
+                'reviewed_by' => $admin->id,
+                'reviewed_at' => now(),
+                'rejection_reason' => $request->input('rejection_reason'),
+                'admin_notes' => $request->input('admin_notes'),
+            ]);
+
+            \Log::info('=== PROVIDER CHANGE REJECTED ===', [
+                'change_id' => $change->id,
+                'provider_id' => $change->provider_id,
+                'rejected_by' => $admin->id,
+            ]);
+
+            // Send notification to provider
+            $this->notificationService->sendProfileChangeRejected(
+                $change->provider->user_id,
+                $change->provider->business_name,
+                $request->input('rejection_reason')
+            );
+
+            return redirect()->route('providers.pendingChanges')
+                ->with('success', 'Profile changes rejected successfully');
+        } catch (\Exception $e) {
+            \Log::error('Error rejecting pending change: ' . $e->getMessage());
+            return redirect()->route('providers.pendingChanges')
+                ->with('error', 'An error occurred while rejecting the changes');
+        }
+    }
+
+    /**
+     * Get all files for a provider (documents + gallery + logo + building image)
+     */
+    private function getAllProviderFiles(ServiceProvider $provider): array
+    {
+        $allFiles = [];
+
+        // 1. Add documents from provider_documents table
+        foreach ($provider->documents as $doc) {
+            $allFiles[] = [
+                'id' => $doc->id,
+                'name' => $doc->original_name ?? basename($doc->file_path),
+                'file_name' => $doc->original_name,
+                'url' => asset('storage/' . $doc->file_path),
+                'file_url' => asset('storage/' . $doc->file_path),
+                'type' => ucfirst(str_replace('_', ' ', $doc->document_type)),
+                'document_type' => $doc->document_type,
+                'verification_status' => $doc->verification_status,
+                'mime_type' => $doc->mime_type,
+            ];
+        }
+
+        // 2. Add gallery images from media library
+        $galleryImages = $provider->getMedia('gallery');
+        foreach ($galleryImages as $index => $galleryImage) {
+            $allFiles[] = [
+                'id' => 'gallery_' . $galleryImage->id,
+                'name' => $galleryImage->file_name,
+                'file_name' => $galleryImage->file_name,
+                'url' => $galleryImage->getUrl(),
+                'file_url' => $galleryImage->getUrl(),
+                'type' => 'Gallery Photo ' . ($index + 1),
+                'document_type' => 'gallery',
+                'verification_status' => 'approved',
+                'mime_type' => $galleryImage->mime_type,
+            ];
+        }
+
+        return $allFiles;
     }
 }

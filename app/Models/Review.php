@@ -13,6 +13,9 @@ class Review extends Model
         'provider_id',
         'rating',
         'comment',
+        'comment_approved',
+        'comment_approved_at',
+        'comment_approved_by',
         'is_visible',
         'is_flagged',
         'flag_reason',
@@ -31,16 +34,19 @@ class Review extends Model
         'rating' => 'integer',
         'is_visible' => 'boolean',
         'is_flagged' => 'boolean',
+        'comment_approved' => 'boolean',
         'flagged_at' => 'datetime',
         'responded_at' => 'datetime',
         'approved_at' => 'datetime',
+        'comment_approved_at' => 'datetime',
     ];
 
     /**
      * Default values for attributes
      */
     protected $attributes = [
-        'approval_status' => 'pending',
+        'approval_status' => 'approved', // Auto-approve rating
+        'comment_approved' => false, // Comments need admin approval
         'is_visible' => true,
         'is_flagged' => false,
     ];

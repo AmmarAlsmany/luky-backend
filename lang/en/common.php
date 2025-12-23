@@ -147,6 +147,7 @@ return [
     'general' => 'General',
     'list' => 'List',
     'pending_approvals' => 'Pending Approvals',
+    'pending_changes' => 'Pending Changes',
     'all_bookings' => 'All Bookings',
     'all_services' => 'All Services',
     'payment_management' => 'Payment Management',

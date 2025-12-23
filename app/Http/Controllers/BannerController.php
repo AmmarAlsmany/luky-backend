@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Intervention\Image\Laravel\Facades\Image;
 
 class BannerController extends Controller
 {
@@ -93,7 +94,7 @@ class BannerController extends Controller
             ], 422);
         }
 
-        // Decode and save the banner image
+        // Decode, optimize and save the banner image
         $imagePath = null;
         if ($request->banner_image) {
             try {
@@ -109,12 +110,24 @@ class BannerController extends Controller
                         throw new \Exception('Base64 decode failed');
                     }
 
-                    // Generate unique filename
-                    $filename = 'banner_' . time() . '_' . uniqid() . '.' . $type;
+                    // Generate unique filename (always use jpg for optimized banners)
+                    $filename = 'banner_' . time() . '_' . uniqid() . '.jpg';
                     $path = 'banners/' . $filename;
 
+                    // Optimize image using Intervention Image
+                    // Resize to max 1200px width, compress to 85% quality, convert to JPG
+                    $image = Image::read($imageData);
+
+                    // Resize if width > 1200px (maintains aspect ratio)
+                    if ($image->width() > 1200) {
+                        $image->scale(width: 1200);
+                    }
+
+                    // Encode to JPG with 85% quality for optimal file size
+                    $optimizedImage = $image->toJpeg(quality: 85);
+
                     // Save to storage
-                    Storage::disk('public')->put($path, $imageData);
+                    Storage::disk('public')->put($path, $optimizedImage);
                     $imagePath = $path;
                 }
             } catch (\Exception $e) {
@@ -272,7 +285,7 @@ class BannerController extends Controller
             ], 422);
         }
 
-        // Decode and save the new banner image
+        // Decode, optimize and save the new banner image
         $imagePath = $banner->image_url; // Keep old image by default
         if ($request->banner_image) {
             try {
@@ -293,12 +306,24 @@ class BannerController extends Controller
                         throw new \Exception('Base64 decode failed');
                     }
 
-                    // Generate unique filename
-                    $filename = 'banner_' . time() . '_' . uniqid() . '.' . $type;
+                    // Generate unique filename (always use jpg for optimized banners)
+                    $filename = 'banner_' . time() . '_' . uniqid() . '.jpg';
                     $path = 'banners/' . $filename;
 
+                    // Optimize image using Intervention Image
+                    // Resize to max 1200px width, compress to 85% quality, convert to JPG
+                    $image = Image::read($imageData);
+
+                    // Resize if width > 1200px (maintains aspect ratio)
+                    if ($image->width() > 1200) {
+                        $image->scale(width: 1200);
+                    }
+
+                    // Encode to JPG with 85% quality for optimal file size
+                    $optimizedImage = $image->toJpeg(quality: 85);
+
                     // Save to storage
-                    Storage::disk('public')->put($path, $imageData);
+                    Storage::disk('public')->put($path, $optimizedImage);
                     $imagePath = $path;
                 }
             } catch (\Exception $e) {

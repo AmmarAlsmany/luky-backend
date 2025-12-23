@@ -15,11 +15,11 @@ use App\Http\Resources\ServiceResource;
 class ServiceController extends Controller
 {
     /**
-     * Get all active service categories
+     * Get all active service categories (cached)
      */
     public function categories(): JsonResponse
     {
-        $categories = ServiceCategory::active()->get();
+        $categories = \App\Services\CacheService::getServiceCategories();
 
         return response()->json([
             'success' => true,
@@ -555,7 +555,7 @@ class ServiceController extends Controller
     }
 
     /**
-     * Get services grouped by category
+     * Get services grouped by category (optimized to prevent N+1)
      */
     public function servicesGroupedByCategory(Request $request): JsonResponse
     {
@@ -564,35 +564,39 @@ class ServiceController extends Controller
             'provider_id' => 'sometimes|exists:service_providers,id',
         ]);
 
-        $categories = ServiceCategory::where('is_active', true)
-            ->orderBy('sort_order')
-            ->get();
+        $categories = \App\Services\CacheService::getServiceCategories();
+
+        // Build base query for services
+        $servicesQuery = Service::with(['provider', 'category'])
+            ->where('is_active', true)
+            ->whereHas('provider', function ($q) {
+                $q->where('verification_status', 'approved')
+                    ->where('is_active', true);
+            });
+
+        // Apply filters
+        if ($request->has('city_id')) {
+            $servicesQuery->whereHas('provider', function ($q) use ($request) {
+                $q->where('city_id', $request->city_id);
+            });
+        }
+
+        if ($request->has('provider_id')) {
+            $servicesQuery->where('provider_id', $request->provider_id);
+        }
+
+        // Get all services at once (prevent N+1)
+        $allServices = $servicesQuery->get();
+
+        // Group services by category
+        $servicesByCategory = $allServices->groupBy('category_id');
 
         $result = [];
 
         foreach ($categories as $category) {
-            $servicesQuery = Service::with(['provider'])
-                ->where('category_id', $category->id)
-                ->where('is_active', true)
-                ->whereHas('provider', function ($q) {
-                    $q->where('verification_status', 'approved')
-                        ->where('is_active', true);
-                });
+            $categoryServices = $servicesByCategory->get($category->id);
 
-            // Apply filters
-            if ($request->has('city_id')) {
-                $servicesQuery->whereHas('provider', function ($q) use ($request) {
-                    $q->where('city_id', $request->city_id);
-                });
-            }
-
-            if ($request->has('provider_id')) {
-                $servicesQuery->where('provider_id', $request->provider_id);
-            }
-
-            $services = $servicesQuery->limit(5)->get();
-
-            if ($services->isNotEmpty()) {
+            if ($categoryServices && $categoryServices->isNotEmpty()) {
                 $result[] = [
                     'category' => [
                         'id' => $category->id,
@@ -601,8 +605,8 @@ class ServiceController extends Controller
                         'icon' => $category->icon,
                         'color' => $category->color,
                     ],
-                    'services' => ServiceResource::collection($services),
-                    'total_services' => $servicesQuery->count(),
+                    'services' => ServiceResource::collection($categoryServices->take(5)),
+                    'total_services' => $categoryServices->count(),
                 ];
             }
         }
@@ -614,7 +618,7 @@ class ServiceController extends Controller
     }
 
     /**
-     * Get trending services (most booked in last 30 days)
+     * Get trending services (most booked in last 30 days) - cached for 30 minutes
      */
     public function trendingServices(Request $request): JsonResponse
     {
@@ -623,35 +627,10 @@ class ServiceController extends Controller
             'limit' => 'sometimes|integer|min:1|max:50',
         ]);
 
-        $query = Service::with(['provider.city', 'category'])
-            ->where('is_active', true)
-            ->whereHas('provider', function ($q) {
-                $q->where('verification_status', 'approved')
-                    ->where('is_active', true);
-            })
-            ->whereHas('bookingItems.booking', function ($q) {
-                $q->where('created_at', '>=', now()->subDays(30))
-                    ->whereIn('status', ['confirmed', 'completed']);
-            });
-
-        // Filter by city if provided
-        if ($request->has('city_id')) {
-            $query->whereHas('provider', function ($q) use ($request) {
-                $q->where('city_id', $request->city_id);
-            });
-        }
-
+        $cityId = $request->input('city_id');
         $limit = $request->get('limit', 10);
 
-        $services = $query->withCount(['bookingItems' => function ($q) {
-            $q->whereHas('booking', function ($bookingQuery) {
-                $bookingQuery->where('created_at', '>=', now()->subDays(30))
-                    ->whereIn('status', ['confirmed', 'completed']);
-            });
-        }])
-            ->orderByDesc('booking_items_count')
-            ->limit($limit)
-            ->get();
+        $services = \App\Services\CacheService::getTrendingServices($cityId, $limit);
 
         return response()->json([
             'success' => true,

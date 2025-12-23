@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class NotificationController extends Controller
 {
@@ -62,15 +63,20 @@ class NotificationController extends Controller
     }
 
     /**
-     * Get unread notifications count
+     * Get unread notifications count (cached for 10 seconds)
      */
     public function unreadCount(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        $count = Notification::where('user_id', $user->id)
-            ->where('is_read', false)
-            ->count();
+        // Cache the count for 10 seconds to prevent repeated DB queries
+        $cacheKey = "user:{$user->id}:unread_notifications_count";
+
+        $count = Cache::remember($cacheKey, 10, function () use ($user) {
+            return Notification::where('user_id', $user->id)
+                ->where('is_read', false)
+                ->count();
+        });
 
         return response()->json([
             'success' => true,
@@ -93,6 +99,9 @@ class NotificationController extends Controller
 
         $notification->markAsRead();
 
+        // Clear unread count cache
+        Cache::forget("user:{$user->id}:unread_notifications_count");
+
         return response()->json([
             'success' => true,
             'message' => 'Notification marked as read'
@@ -112,6 +121,9 @@ class NotificationController extends Controller
                 'is_read' => true,
                 'read_at' => now()
             ]);
+
+        // Clear unread count cache
+        Cache::forget("user:{$user->id}:unread_notifications_count");
 
         return response()->json([
             'success' => true,

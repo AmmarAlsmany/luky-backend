@@ -356,7 +356,9 @@ class BookingController extends Controller
             // Set timestamp based on status
             switch ($validated['status']) {
                 case 'confirmed':
+                    $paymentTimeoutMinutes = (int) (\App\Models\AppSetting::where('key', 'payment_timeout_minutes')->value('value') ?? 5);
                     $updateData['confirmed_at'] = now();
+                    $updateData['payment_deadline'] = now()->addMinutes($paymentTimeoutMinutes);
                     break;
                 case 'completed':
                     $updateData['completed_at'] = now();
