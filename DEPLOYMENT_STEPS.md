@@ -77,7 +77,34 @@ sudo systemctl status redis      # Should be active
 
 ---
 
-## Step 5: Run Database Migrations
+## Step 5: Upload Firebase Credentials
+
+```bash
+# IMPORTANT: Push notifications require Firebase credentials
+
+# 1. Create the firebase directory if it doesn't exist
+mkdir -p storage/app/firebase
+
+# 2. Upload your Firebase credentials file
+# From your local machine, use scp:
+scp storage/app/firebase/luky-96cae-firebase-adminsdk-fbsvc-96f53ee261.json \
+    user@server:/path/to/luky-backend/storage/app/firebase/
+
+# 3. Set proper permissions
+chmod 600 storage/app/firebase/luky-96cae-firebase-adminsdk-fbsvc-96f53ee261.json
+
+# 4. Verify the file exists
+ls -la storage/app/firebase/
+
+# Expected output:
+# -rw------- 1 www-data www-data 2345 Dec 23 14:00 luky-96cae-firebase-adminsdk-fbsvc-96f53ee261.json
+```
+
+**Note:** Without this file, push notifications will not work. The deployment script will warn you if it's missing.
+
+---
+
+## Step 6: Run Database Migrations
 
 ```bash
 # Backup database first (IMPORTANT!)
@@ -99,7 +126,7 @@ php artisan migrate --force
 
 ---
 
-## Step 6: Clear Old Caches
+## Step 7: Clear Old Caches
 
 ```bash
 # Clear all Laravel caches
@@ -114,7 +141,7 @@ php artisan clear-compiled
 
 ---
 
-## Step 7: Optimize Laravel
+## Step 8: Optimize Laravel
 
 ```bash
 # Cache configuration
@@ -132,7 +159,7 @@ composer dump-autoload --optimize
 
 ---
 
-## Step 8: Warm Up Redis Caches
+## Step 9: Warm Up Redis Caches
 
 ```bash
 # Warm up all application caches
@@ -152,7 +179,7 @@ php artisan cache:warmup
 
 ---
 
-## Step 9: Restart Queue Workers
+## Step 10: Restart Queue Workers
 
 ```bash
 # Gracefully restart all queue workers
@@ -170,7 +197,7 @@ php artisan queue:work --tries=3 --timeout=90 &
 
 ---
 
-## Step 10: Verify Deployment
+## Step 11: Verify Deployment
 
 ```bash
 # 1. Test Redis health with full diagnostics
@@ -198,7 +225,7 @@ curl -I http://your-domain.com/api/v1/service-categories
 
 ---
 
-## Step 11: Monitor Performance
+## Step 12: Monitor Performance
 
 ```bash
 # Monitor Redis in real-time
@@ -216,7 +243,7 @@ tail -f storage/logs/laravel.log
 
 ---
 
-## Step 12: Setup Process Monitoring (Production)
+## Step 13: Setup Process Monitoring (Production)
 
 ### Option A: Using Supervisor (Recommended)
 

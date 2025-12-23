@@ -37,46 +37,62 @@ fi
 
 # Step 2: Backup database
 echo ""
-echo -e "${YELLOW}[2/10] Creating database backup...${NC}"
+echo -e "${YELLOW}[2/11] Creating database backup...${NC}"
 BACKUP_FILE="backup_$(date +%Y%m%d_%H%M%S).sql"
 echo "Backup file: $BACKUP_FILE"
 # Uncomment and configure for your database
 # pg_dump -U postgres luky_production > "$BACKUP_FILE"
 echo -e "${GREEN}✓ Database backup ready (configure pg_dump in script)${NC}"
 
-# Step 3: Install dependencies
+# Step 3: Verify Firebase credentials
 echo ""
-echo -e "${YELLOW}[3/10] Installing dependencies...${NC}"
+echo -e "${YELLOW}[3/11] Verifying Firebase credentials...${NC}"
+if [ -f "storage/app/firebase/luky-96cae-firebase-adminsdk-fbsvc-96f53ee261.json" ]; then
+    echo -e "${GREEN}✓ Firebase credentials file found${NC}"
+else
+    echo -e "${RED}✗ Firebase credentials file not found!${NC}"
+    echo "Please upload: storage/app/firebase/luky-96cae-firebase-adminsdk-fbsvc-96f53ee261.json"
+    echo "You can continue without it, but push notifications will not work."
+    read -p "Continue anyway? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+fi
+
+# Step 4: Install dependencies
+echo ""
+echo -e "${YELLOW}[4/11] Installing dependencies...${NC}"
 composer install --no-dev --optimize-autoloader --quiet
 echo -e "${GREEN}✓ Dependencies installed${NC}"
 
-# Step 4: Clear old caches
+# Step 5: Clear old caches
 echo ""
-echo -e "${YELLOW}[4/10] Clearing old caches...${NC}"
+echo -e "${YELLOW}[5/11] Clearing old caches...${NC}"
 php artisan cache:clear --quiet
 php artisan config:clear --quiet
 php artisan route:clear --quiet
 php artisan view:clear --quiet
 echo -e "${GREEN}✓ Old caches cleared${NC}"
 
-# Step 5: Run migrations
+# Step 6: Run migrations
 echo ""
-echo -e "${YELLOW}[5/10] Running database migrations...${NC}"
+echo -e "${YELLOW}[6/11] Running database migrations...${NC}"
 php artisan migrate --force
 echo -e "${GREEN}✓ Migrations completed${NC}"
 
-# Step 6: Optimize Laravel
+# Step 7: Optimize Laravel
 echo ""
-echo -e "${YELLOW}[6/10] Optimizing Laravel...${NC}"
+echo -e "${YELLOW}[7/11] Optimizing Laravel...${NC}"
 php artisan config:cache --quiet
 php artisan route:cache --quiet
 php artisan view:cache --quiet
 composer dump-autoload --optimize --quiet
 echo -e "${GREEN}✓ Laravel optimized${NC}"
 
-# Step 7: Test Redis connection
+# Step 8: Test Redis connection
 echo ""
-echo -e "${YELLOW}[7/10] Testing Redis connection from Laravel...${NC}"
+echo -e "${YELLOW}[8/11] Testing Redis connection from Laravel...${NC}"
 php artisan redis:health
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Laravel Redis connection successful${NC}"
@@ -85,15 +101,15 @@ else
     exit 1
 fi
 
-# Step 8: Warm up caches
+# Step 9: Warm up caches
 echo ""
-echo -e "${YELLOW}[8/10] Warming up Redis caches...${NC}"
+echo -e "${YELLOW}[9/11] Warming up Redis caches...${NC}"
 php artisan cache:warmup
 echo -e "${GREEN}✓ Caches warmed up${NC}"
 
-# Step 9: Restart queue workers
+# Step 10: Restart queue workers
 echo ""
-echo -e "${YELLOW}[9/10] Restarting queue workers...${NC}"
+echo -e "${YELLOW}[10/11] Restarting queue workers...${NC}"
 php artisan queue:restart
 echo -e "${GREEN}✓ Queue workers restarted${NC}"
 
@@ -104,9 +120,9 @@ if command -v supervisorctl > /dev/null 2>&1; then
     echo -e "${GREEN}✓ Supervisor workers restarted${NC}"
 fi
 
-# Step 10: Verify deployment
+# Step 11: Verify deployment
 echo ""
-echo -e "${YELLOW}[10/10] Verifying deployment...${NC}"
+echo -e "${YELLOW}[11/11] Verifying deployment...${NC}"
 
 # Test cache
 TEST_RESULT=$(php artisan tinker --execute="echo Cache::put('deploy_test', 'success', 60) ? 'OK' : 'FAIL';")
