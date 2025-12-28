@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\PromoCodeController;
 Route::prefix('v1')->group(function () {
 
     // Authentication (Rate Limited)
+    Route::get('/user/check-phone', [AuthController::class, 'checkPhone'])->middleware('throttle:10,1');
     Route::post('/auth/send-otp', [OtpController::class, 'sendOtp'])->middleware('throttle:5,1');
     Route::post('/auth/verify-otp', [OtpController::class, 'verifyOtp'])->middleware('throttle:10,1');
     Route::post('/auth/resend-otp', [OtpController::class, 'resendOtp'])->middleware('throttle:3,1');
@@ -72,6 +73,7 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active', 'validate.app.type'])
         // Profile
         Route::get('/provider/profile', [ProviderController::class, 'getProfile']);
         Route::put('/provider/profile', [ProviderController::class, 'updateProfile']);
+        Route::get('/provider/pending-changes', [ProviderController::class, 'getPendingChanges']);
 
         // Documents
         Route::post('/provider/documents', [ProviderController::class, 'uploadDocuments']);
@@ -87,8 +89,23 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active', 'validate.app.type'])
         Route::put('/provider/services/{id}', [ProviderController::class, 'updateService']);
         Route::delete('/provider/services/{id}', [ProviderController::class, 'deleteService']);
 
+        // Clients
+        Route::get('/provider/clients', [ProviderController::class, 'getClients']);
+        Route::post('/provider/send-notification', [ProviderController::class, 'sendNotificationToClients']);
+
+        // Bank Information
+        Route::put('/provider/bank-info', [ProviderController::class, 'updateBankInfo']);
+
+        // Balance & Withdrawals
+        Route::get('/provider/balance', [ProviderController::class, 'getAvailableBalance']);
+        Route::post('/provider/withdrawal-request', [ProviderController::class, 'requestWithdrawal']);
+        Route::post('/provider/withdrawals', [ProviderController::class, 'requestWithdrawal']); // Alias for mobile app
+        Route::get('/provider/withdrawal-history', [ProviderController::class, 'getWithdrawalHistory']);
+        Route::get('/provider/withdrawals', [ProviderController::class, 'getWithdrawalHistory']); // Alias for mobile app
+
         // Analytics
         Route::get('/provider/analytics', [ProviderController::class, 'getAnalytics']);
+        Route::get('/provider/daily-stats', [ProviderController::class, 'getDailyBookingStats']);
     });
 
     // Client booking routes
@@ -230,6 +247,12 @@ Route::prefix('admin')->group(function () {
         Route::get('/providers/{id}/revenue', [App\Http\Controllers\Api\Admin\ProviderManagementController::class, 'revenue']);
         Route::get('/providers/{id}/reviews', [App\Http\Controllers\Api\Admin\ProviderManagementController::class, 'reviews']);
         Route::get('/providers/{id}/activity-logs', [App\Http\Controllers\Api\Admin\ProviderManagementController::class, 'activityLogs']);
+
+        // Provider Pending Changes
+        Route::get('/providers/pending-changes', [App\Http\Controllers\Api\Admin\ProviderManagementController::class, 'getPendingChanges']);
+        Route::get('/providers/pending-changes/{id}', [App\Http\Controllers\Api\Admin\ProviderManagementController::class, 'getPendingChangeDetails']);
+        Route::post('/providers/pending-changes/{id}/approve', [App\Http\Controllers\Api\Admin\ProviderManagementController::class, 'approvePendingChange']);
+        Route::post('/providers/pending-changes/{id}/reject', [App\Http\Controllers\Api\Admin\ProviderManagementController::class, 'rejectPendingChange']);
 
         // ===================================
         // EMPLOYEE MANAGEMENT

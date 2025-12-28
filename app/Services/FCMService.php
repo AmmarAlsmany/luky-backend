@@ -32,9 +32,9 @@ class FCMService
                 $this->messaging = (new Factory)
                     ->withServiceAccount($this->credentialsPath)
                     ->createMessaging();
-                Log::info('Firebase Messaging initialized successfully', [
-                    'credentials_file' => basename($this->credentialsPath)
-                ]);
+                // Log::info('Firebase Messaging initialized successfully', [
+                //     'credentials_file' => basename($this->credentialsPath)
+                // ]);
             } catch (\Exception $e) {
                 Log::error('Failed to initialize Firebase Messaging: ' . $e->getMessage());
                 $this->messaging = null;
@@ -54,21 +54,33 @@ class FCMService
     public function sendToUser(int $userId, string $title, string $body, array $data = []): bool
     {
         if (!$this->messaging) {
-            Log::warning('FCM messaging not configured');
+            Log::warning('FCM messaging not configured', [
+                'credentials_path' => $this->credentialsPath,
+                'file_exists' => $this->credentialsPath ? file_exists($this->credentialsPath) : false,
+            ]);
             return false;
         }
 
         $tokens = DeviceToken::where('user_id', $userId)
             ->where('is_active', true)
-            ->pluck('token')
-            ->toArray();
+            ->get();
 
-        if (empty($tokens)) {
-            Log::info("No device tokens found for user: {$userId}");
+        if ($tokens->isEmpty()) {
+            Log::info("No active device tokens found for user: {$userId}");
             return false;
         }
 
-        return $this->sendToTokens($tokens, $title, $body, $data);
+        Log::info("Sending FCM to user {$userId}", [
+            'token_count' => $tokens->count(),
+            'title' => $title,
+            'tokens_preview' => $tokens->map(fn($t) => [
+                'id' => $t->id,
+                'type' => $t->device_type,
+                'preview' => substr($t->token, 0, 20) . '...',
+            ])->toArray(),
+        ]);
+
+        return $this->sendToTokens($tokens->pluck('token')->toArray(), $title, $body, $data);
     }
 
     /**
@@ -90,8 +102,9 @@ class FCMService
                     'notification' => [
                         'channel_id' => 'booking_notifications',
                         'sound' => 'default',
-                        'priority' => 'high',
                         'default_vibrate_timings' => true,
+                        'default_light_settings' => true,
+                        'visibility' => 'public',
                     ],
                 ])
                 ->withApnsConfig([
@@ -99,14 +112,22 @@ class FCMService
                         'aps' => [
                             'sound' => 'default',
                             'badge' => 1,
+                            'alert' => [
+                                'title' => $title,
+                                'body' => $body,
+                            ],
                         ],
                     ],
                 ]);
 
             $report = $this->messaging->sendMulticast($message, $tokens);
 
-            $successCount = $report->successes()->count();
-            $failureCount = $report->failures()->count();
+            // Get failures and successes (store once to avoid iterator consumption issues)
+            $failures = $report->failures();
+            $successes = $report->successes();
+
+            $successCount = $successes->count();
+            $failureCount = $failures->count();
 
             Log::info('FCM notification sent', [
                 'success_count' => $successCount,
@@ -116,33 +137,71 @@ class FCMService
 
             // Log failures for debugging
             if ($failureCount > 0) {
-                Log::warning("FCM has {$failureCount} failures. Processing...");
+                Log::warning("FCM has {$failureCount} failures. Detailed errors:");
 
-                $failures = $report->failures();
-                Log::warning("Failures type: " . get_class($failures));
+                try {
+                    $failureDetails = [];
+                    $failureItems = $failures->getItems();
 
-                $failures->getItems(); // Force iterator to load
+                    foreach ($failureItems as $index => $failure) {
+                        try {
+                            $error = $failure->error();
+                            $target = $failure->target();
 
-                foreach ($failures as $index => $failure) {
-                    Log::warning("Processing failure index: {$index}");
+                            // Extract error details
+                            $errorCode = 'UNKNOWN';
+                            $errorMsg = 'Unknown error';
 
-                    try {
-                        $error = $failure->error();
-                        $errorCode = method_exists($error, 'errorCode') ? $error->errorCode() : 'UNKNOWN';
-                        $errorMsg = method_exists($error, 'getMessage') ? $error->getMessage() : 'Unknown error';
+                            if (is_object($error)) {
+                                // Firebase SDK uses errorCode() and getMessage() methods
+                                if (method_exists($error, 'errorCode')) {
+                                    $errorCode = $error->errorCode();
+                                } elseif (method_exists($error, 'getCode')) {
+                                    $errorCode = $error->getCode();
+                                }
 
-                        $target = $failure->target();
-                        $tokenValue = method_exists($target, 'value') ? $target->value() : 'Unknown';
+                                if (method_exists($error, 'getMessage')) {
+                                    $errorMsg = $error->getMessage();
+                                }
+                            } else {
+                                $errorMsg = (string) $error;
+                            }
 
-                        Log::error('FCM FAILURE FOUND', [
-                            'index' => $index,
-                            'token_preview' => substr($tokenValue, 0, 50),
-                            'error_code' => $errorCode,
-                            'error_message' => $errorMsg,
-                        ]);
-                    } catch (\Throwable $innerEx) {
-                        Log::error("Error in failure loop: " . $innerEx->getMessage());
+                            $tokenValue = 'Unknown';
+                            if (is_object($target) && method_exists($target, 'value')) {
+                                $tokenValue = $target->value();
+                            } elseif (is_string($target)) {
+                                $tokenValue = $target;
+                            }
+
+                            $failureDetail = [
+                                'index' => $index,
+                                'token_preview' => substr($tokenValue, 0, 50) . '...',
+                                'error_code' => $errorCode,
+                                'error_message' => $errorMsg,
+                            ];
+
+                            $failureDetails[] = $failureDetail;
+
+                            Log::error('FCM Token Failed', $failureDetail);
+                        } catch (\Throwable $innerEx) {
+                            Log::error('Error extracting failure details', [
+                                'index' => $index,
+                                'exception' => $innerEx->getMessage(),
+                                'trace' => $innerEx->getTraceAsString(),
+                            ]);
+                        }
                     }
+
+                    Log::warning('FCM Failure Summary', [
+                        'total_failures' => count($failureDetails),
+                        'failures' => $failureDetails,
+                    ]);
+                } catch (\Throwable $ex) {
+                    Log::error('Error processing FCM failures', [
+                        'exception' => $ex->getMessage(),
+                        'trace' => $ex->getTraceAsString(),
+                    ]);
                 }
             }
 
@@ -151,9 +210,9 @@ class FCMService
             }
 
             // Handle invalid tokens
-            $this->handleInvalidTokens($report);
+            $this->handleInvalidTokens($failures);
 
-            return $report->successes()->count() > 0;
+            return $successCount > 0;
         } catch (MessagingException $e) {
             Log::error('FCM messaging exception: ' . $e->getMessage());
             return false;
@@ -176,7 +235,29 @@ class FCMService
         try {
             $message = CloudMessage::withTarget('topic', $topic)
                 ->withNotification(Notification::create($title, $body))
-                ->withData($data);
+                ->withData($data)
+                ->withAndroidConfig([
+                    'priority' => 'high',
+                    'notification' => [
+                        'channel_id' => 'booking_notifications',
+                        'sound' => 'default',
+                        'default_vibrate_timings' => true,
+                        'default_light_settings' => true,
+                        'visibility' => 'public',
+                    ],
+                ])
+                ->withApnsConfig([
+                    'payload' => [
+                        'aps' => [
+                            'sound' => 'default',
+                            'badge' => 1,
+                            'alert' => [
+                                'title' => $title,
+                                'body' => $body,
+                            ],
+                        ],
+                    ],
+                ]);
 
             $this->messaging->send($message);
             return true;
@@ -192,17 +273,71 @@ class FCMService
     /**
      * Handle invalid/expired tokens
      */
-    protected function handleInvalidTokens($report): void
+    protected function handleInvalidTokens($failures): void
     {
-        foreach ($report->failures() as $failure) {
-            $error = $failure->error();
-            $token = $failure->target()->value();
-            
-            // Deactivate invalid tokens
-            if (in_array($error->errorCode(), ['INVALID_ARGUMENT', 'NOT_FOUND', 'UNREGISTERED']) && $token) {
-                DeviceToken::where('token', $token)->update(['is_active' => false]);
-                Log::info("Deactivated invalid FCM token: {$token}");
+        try {
+            $failureItems = $failures->getItems();
+
+            foreach ($failureItems as $failure) {
+                try {
+                    $error = $failure->error();
+                    $target = $failure->target();
+
+                    $token = null;
+                    if (is_object($target) && method_exists($target, 'value')) {
+                        $token = $target->value();
+                    } elseif (is_string($target)) {
+                        $token = $target;
+                    }
+
+                    if (!$token) {
+                        continue;
+                    }
+
+                    // Extract error code and message safely
+                    $errorCode = null;
+                    $errorMessage = '';
+
+                    if (is_object($error)) {
+                        if (method_exists($error, 'errorCode')) {
+                            $errorCode = $error->errorCode();
+                        } elseif (method_exists($error, 'getCode')) {
+                            $errorCode = $error->getCode();
+                        }
+
+                        if (method_exists($error, 'getMessage')) {
+                            $errorMessage = $error->getMessage();
+                        }
+                    }
+
+                    // Deactivate invalid tokens based on error code or message
+                    $invalidErrors = ['INVALID_ARGUMENT', 'NOT_FOUND', 'UNREGISTERED'];
+                    $invalidMessages = ['not found', 'invalid registration', 'unregistered'];
+
+                    $shouldDeactivate = ($errorCode && in_array($errorCode, $invalidErrors)) ||
+                                       ($errorMessage && str_contains(strtolower($errorMessage), 'not found')) ||
+                                       ($errorMessage && str_contains(strtolower($errorMessage), 'invalid registration')) ||
+                                       ($errorMessage && str_contains(strtolower($errorMessage), 'unregistered'));
+
+                    if ($shouldDeactivate) {
+                        DeviceToken::where('token', $token)->update(['is_active' => false]);
+                        Log::info("Deactivated invalid FCM token", [
+                            'token_preview' => substr($token, 0, 20) . '...',
+                            'error_code' => $errorCode,
+                            'error_message' => $errorMessage,
+                        ]);
+                    }
+                } catch (\Throwable $ex) {
+                    Log::warning('Error handling invalid token', [
+                        'exception' => $ex->getMessage(),
+                    ]);
+                }
             }
+        } catch (\Throwable $ex) {
+            Log::error('Error processing invalid tokens', [
+                'exception' => $ex->getMessage(),
+                'trace' => $ex->getTraceAsString(),
+            ]);
         }
     }
 

@@ -634,4 +634,139 @@ class NotificationService
             ]
         );
     }
+
+    /**
+     * Send notification when provider submits withdrawal request
+     */
+    public function sendWithdrawalRequestSubmitted(int $userId, string $businessName, float $amount, int $withdrawalId): void
+    {
+        // Notify provider - Bilingual
+        $title = 'Withdrawal Request Submitted | تم إرسال طلب السحب';
+        $body = "Your withdrawal request for {$amount} SAR has been submitted and is pending review.\n" .
+                "تم إرسال طلب السحب الخاص بك بمبلغ {$amount} ريال وهو قيد المراجعة.";
+
+        $this->send(
+            $userId,
+            'withdrawal_request_submitted',
+            $title,
+            $body,
+            [
+                'withdrawal_id' => $withdrawalId,
+                'amount' => $amount,
+                'business_name' => $businessName,
+            ]
+        );
+
+        // Notify admins - Bilingual
+        $adminTitle = 'New Withdrawal Request | طلب سحب جديد';
+        $adminBody = "{$businessName} has requested a withdrawal of {$amount} SAR. Please review.\n" .
+                     "طلب {$businessName} سحب مبلغ {$amount} ريال. يرجى المراجعة.";
+
+        $this->sendToAdmins(
+            'withdrawal_request',
+            $adminTitle,
+            $adminBody,
+            [
+                'withdrawal_id' => $withdrawalId,
+                'provider_name' => $businessName,
+                'amount' => $amount,
+            ]
+        );
+    }
+
+    /**
+     * Send notification when withdrawal is approved
+     */
+    public function sendWithdrawalApproved(int $userId, string $businessName, float $amount, int $withdrawalId): void
+    {
+        // Bilingual notification to provider
+        $title = 'Withdrawal Approved | تم الموافقة على السحب';
+        $body = "Great news! Your withdrawal request for {$amount} SAR has been approved and is being processed.\n" .
+                "أخبار رائعة! تم الموافقة على طلب السحب الخاص بك بمبلغ {$amount} ريال وجاري معالجته.";
+
+        $this->send(
+            $userId,
+            'withdrawal_approved',
+            $title,
+            $body,
+            [
+                'withdrawal_id' => $withdrawalId,
+                'amount' => $amount,
+                'business_name' => $businessName,
+            ]
+        );
+    }
+
+    /**
+     * Send notification when withdrawal is rejected
+     */
+    public function sendWithdrawalRejected(int $userId, string $businessName, float $amount, int $withdrawalId, string $reason = ''): void
+    {
+        // Bilingual notification to provider
+        $title = 'Withdrawal Rejected | تم رفض السحب';
+        $body = "Your withdrawal request for {$amount} SAR has been rejected." .
+                ($reason ? " Reason: {$reason}" : '') . "\n" .
+                "تم رفض طلب السحب الخاص بك بمبلغ {$amount} ريال." .
+                ($reason ? " السبب: {$reason}" : '');
+
+        $this->send(
+            $userId,
+            'withdrawal_rejected',
+            $title,
+            $body,
+            [
+                'withdrawal_id' => $withdrawalId,
+                'amount' => $amount,
+                'business_name' => $businessName,
+                'reason' => $reason,
+            ]
+        );
+    }
+
+    /**
+     * Send notification when withdrawal is completed
+     */
+    public function sendWithdrawalCompleted(int $userId, string $businessName, float $amount, int $withdrawalId, string $transactionReference = ''): void
+    {
+        // Bilingual notification to provider
+        $title = 'Withdrawal Completed | تم إتمام السحب';
+        $body = "Your withdrawal of {$amount} SAR has been completed successfully." .
+                ($transactionReference ? " Reference: {$transactionReference}" : '') . "\n" .
+                "تم إتمام سحب مبلغ {$amount} ريال بنجاح." .
+                ($transactionReference ? " المرجع: {$transactionReference}" : '');
+
+        $this->send(
+            $userId,
+            'withdrawal_completed',
+            $title,
+            $body,
+            [
+                'withdrawal_id' => $withdrawalId,
+                'amount' => $amount,
+                'business_name' => $businessName,
+                'transaction_reference' => $transactionReference,
+            ]
+        );
+    }
+
+    /**
+     * Send notification when bank info is updated
+     */
+    public function sendBankInfoUpdated(int $userId, string $businessName): void
+    {
+        // Bilingual notification to provider
+        $title = 'Bank Info Updated | تم تحديث معلومات البنك';
+        $body = "Your bank account information has been updated successfully.\n" .
+                "تم تحديث معلومات حسابك البنكي بنجاح.";
+
+        $this->send(
+            $userId,
+            'bank_info_updated',
+            $title,
+            $body,
+            [
+                'business_name' => $businessName,
+            ]
+        );
+    }
 }

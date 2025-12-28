@@ -23,6 +23,44 @@ class AuthController extends Controller
     }
 
     /**
+     * Check if phone number exists and return user type
+     * PUBLIC ENDPOINT - No authentication required
+     */
+    public function checkPhone(Request $request): JsonResponse
+    {
+        $phoneRule = new SaudiPhoneNumber();
+
+        $request->validate([
+            'phone' => [
+                'required',
+                'string',
+                $phoneRule
+            ]
+        ]);
+
+        // Normalize the phone number
+        $normalizedPhone = $this->phoneService->normalize($request->phone);
+
+        // Check if user exists
+        $user = User::where('phone', $normalizedPhone)->first();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'exists' => false,
+                'message' => 'Phone number not registered'
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'exists' => true,
+            'user_type' => $user->user_type,
+            'is_active' => $user->is_active
+        ]);
+    }
+
+    /**
      * Register new user after OTP verification
      */
     public function register(Request $request): JsonResponse
@@ -107,9 +145,16 @@ class AuthController extends Controller
      */
     public function profile(Request $request): JsonResponse
     {
+        $user = $request->user();
+
+        // Eager load provider profile if user is a provider
+        if ($user->user_type === 'provider') {
+            $user->load('providerProfile');
+        }
+
         return response()->json([
             'success' => true,
-            'data' => new UserResource($request->user())
+            'data' => new UserResource($user)
         ]);
     }
 

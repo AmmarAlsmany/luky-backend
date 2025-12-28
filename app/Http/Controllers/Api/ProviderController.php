@@ -422,13 +422,16 @@ class ProviderController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Your profile changes have been updated and are waiting for admin approval.',
+                'requires_approval' => true,
                 'data' => [
-                    'provider' => new ServiceProviderResource($provider->fresh()),
-                    'pending_change' => [
+                    'current_profile' => new ServiceProviderResource($provider->fresh()),
+                    'pending_changes' => [
                         'id' => $existingPendingChange->id,
-                        'status' => $existingPendingChange->status,
-                        'changed_fields' => $existingPendingChange->changed_fields,
-                        'created_at' => $existingPendingChange->created_at,
+                        'status' => 'pending',
+                        'submitted_data' => $existingPendingChange->changed_fields,
+                        'current_data' => $oldValues,
+                        'submitted_at' => $existingPendingChange->created_at->format('Y-m-d H:i:s'),
+                        'note' => 'These changes will be applied after admin approval'
                     ]
                 ]
             ]);
@@ -458,13 +461,16 @@ class ProviderController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Your profile changes have been submitted and are waiting for admin approval.',
+            'requires_approval' => true,
             'data' => [
-                'provider' => new ServiceProviderResource($provider->fresh()),
-                'pending_change' => [
+                'current_profile' => new ServiceProviderResource($provider->fresh()),
+                'pending_changes' => [
                     'id' => $pendingChange->id,
-                    'status' => $pendingChange->status,
-                    'changed_fields' => $pendingChange->changed_fields,
-                    'created_at' => $pendingChange->created_at,
+                    'status' => 'pending',
+                    'submitted_data' => $pendingChange->changed_fields,
+                    'current_data' => $oldValues,
+                    'submitted_at' => $pendingChange->created_at->format('Y-m-d H:i:s'),
+                    'note' => 'These changes will be applied after admin approval'
                 ]
             ]
         ]);
@@ -945,6 +951,12 @@ class ProviderController extends Controller
                 'bank_info' => $validated,
             ]);
 
+            // Send notification to provider
+            $this->notificationService->sendBankInfoUpdated(
+                $user->id,
+                $provider->business_name
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Bank information updated successfully.',
@@ -1194,6 +1206,14 @@ class ProviderController extends Controller
             'bank_iban' => $provider->iban,
             'notes' => $validated['notes'] ?? null,
         ]);
+
+        // Send notification to provider and admins
+        $this->notificationService->sendWithdrawalRequestSubmitted(
+            $user->id,
+            $provider->business_name,
+            $withdrawal->amount,
+            $withdrawal->id
+        );
 
         return response()->json([
             'success' => true,

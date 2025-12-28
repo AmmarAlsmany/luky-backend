@@ -221,8 +221,8 @@ class ServiceProvider extends Model implements HasMedia
                 : $logo->getUrl();
         }
 
-        // Use default business avatar
-        return asset('images/default-business.svg');
+        // Return null to let mobile app handle default image
+        return null;
     }
 
     /**

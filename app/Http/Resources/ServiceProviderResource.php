@@ -59,10 +59,14 @@ class ServiceProviderResource extends JsonResource
                     ];
                 });
             }),
-            
-            'logo_url' => $this->getFirstMediaUrl('logo'),
+
+            'logo_url' => $this->getFirstMediaUrl('logo') ?: null,
+            'building_image_url' => $this->getFirstMediaUrl('building_image') ?: null,
             'gallery' => $this->getMedia('gallery')->map(fn($media) => $media->getUrl()),
-            
+
+            // Pending changes indicator
+            'has_pending_changes' => $this->pendingChanges()->where('status', 'pending')->exists(),
+
             'verified_at' => $this->verified_at?->format('Y-m-d H:i:s'),
             'created_at' => $this->created_at->format('Y-m-d H:i:s'),
         ];

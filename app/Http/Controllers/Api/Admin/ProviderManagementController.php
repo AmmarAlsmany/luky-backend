@@ -834,6 +834,12 @@ class ProviderManagementController extends Controller
                 'changed_fields' => $change->changed_fields,
             ]);
 
+            // Send notification to provider
+            app(\App\Services\NotificationService::class)->sendProfileChangeApproved(
+                $change->provider->user_id,
+                $change->provider->business_name
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Provider profile changes have been approved and applied.',
@@ -884,6 +890,16 @@ class ProviderManagementController extends Controller
             'rejected_by' => $admin->id,
             'rejection_reason' => $validated['rejection_reason'],
         ]);
+
+        // Send notification to provider with rejection reason
+        $provider = \App\Models\ServiceProvider::find($change->provider_id);
+        if ($provider) {
+            app(\App\Services\NotificationService::class)->sendProfileChangeRejected(
+                $provider->user_id,
+                $provider->business_name,
+                $validated['rejection_reason']
+            );
+        }
 
         return response()->json([
             'success' => true,
