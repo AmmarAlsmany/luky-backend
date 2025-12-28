@@ -42,7 +42,7 @@ class ProviderController extends Controller
                 'email' => 'required|email|unique:users,email',
                 'phone' => 'required|string|unique:users,phone',
                 'business_name' => 'required|string|max:255',
-                'category_id' => 'required|exists:service_categories,id', // Use category instead of business_type
+                'provider_category_id' => 'required|exists:provider_categories,id',
                 'description' => 'nullable|string|max:1000',
                 'city_id' => 'required|exists:cities,id',
                 'address' => 'required|string|max:500',
@@ -54,9 +54,9 @@ class ProviderController extends Controller
 
             DB::beginTransaction();
             try {
-                // Get category and map to business_type (same as dashboard)
-                $category = \App\Models\ServiceCategory::findOrFail($validated['category_id']);
-                $businessType = $category->getBusinessType();
+                // Get provider category to set business_type for backward compatibility
+                $providerCategory = \App\Models\ProviderCategory::findOrFail($validated['provider_category_id']);
+                $businessType = strtolower(str_replace(' ', '_', $providerCategory->name_en));
 
                 // Create new user
                 $user = User::create([
@@ -74,7 +74,8 @@ class ProviderController extends Controller
                 $provider = ServiceProvider::create([
                     'user_id' => $user->id,
                     'business_name' => $validated['business_name'],
-                    'business_type' => $businessType, // Auto-mapped from category
+                    'business_type' => $businessType,
+                    'provider_category_id' => $validated['provider_category_id'],
                     'description' => $validated['description'] ?? '',
                     'city_id' => $validated['city_id'],
                     'address' => $validated['address'] ?? '',
@@ -128,7 +129,7 @@ class ProviderController extends Controller
 
         $validated = $request->validate([
             'business_name' => 'required|string|max:255',
-            'category_id' => 'required|exists:service_categories,id', // Category determines business_type
+            'provider_category_id' => 'required|exists:provider_categories,id',
             'description' => 'nullable|string|max:1000',
             'city_id' => 'required|exists:cities,id',
             'address' => 'required|string|max:500', // Required - clients need to find provider
@@ -143,9 +144,9 @@ class ProviderController extends Controller
 
         DB::beginTransaction();
         try {
-            // Get category and map to business_type (same as dashboard)
-            $category = \App\Models\ServiceCategory::findOrFail($validated['category_id']);
-            $businessType = $category->getBusinessType();
+            // Get provider category to set business_type for backward compatibility
+            $providerCategory = \App\Models\ProviderCategory::findOrFail($validated['provider_category_id']);
+            $businessType = strtolower(str_replace(' ', '_', $providerCategory->name_en));
 
             // Update user type to provider if not already
             if ($user->user_type !== 'provider') {
@@ -164,6 +165,7 @@ class ProviderController extends Controller
                 $provider->update([
                     'business_name' => $validated['business_name'],
                     'business_type' => $businessType,
+                    'provider_category_id' => $validated['provider_category_id'],
                     'description' => $validated['description'] ?? '',
                     'city_id' => $validated['city_id'],
                     'address' => $validated['address'],
@@ -189,7 +191,8 @@ class ProviderController extends Controller
             $provider = ServiceProvider::create([
                 'user_id' => $user->id,
                 'business_name' => $validated['business_name'],
-                'business_type' => $businessType, // Auto-mapped from category
+                'business_type' => $businessType,
+                'provider_category_id' => $validated['provider_category_id'],
                 'description' => $validated['description'] ?? '',
                 'city_id' => $validated['city_id'],
                 'address' => $validated['address'],

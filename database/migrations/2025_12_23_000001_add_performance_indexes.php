@@ -90,8 +90,8 @@ return new class extends Migration
             // Index for booking payments
             $table->index(['booking_id', 'status'], 'idx_payments_booking_status');
 
-            // Index for user payment history
-            $table->index(['user_id', 'status', 'created_at'], 'idx_payments_user_status_created');
+            // Index for payment status and date queries
+            $table->index(['status', 'created_at'], 'idx_payments_status_created');
 
             // Index for gateway queries
             $table->index(['gateway', 'payment_id'], 'idx_payments_gateway_id');
@@ -115,16 +115,16 @@ return new class extends Migration
         // Reviews table indexes
         Schema::table('reviews', function (Blueprint $table) {
             // Index for provider reviews
-            $table->index(['provider_id', 'is_approved'], 'idx_reviews_provider_approved');
+            $table->index(['provider_id', 'approval_status'], 'idx_reviews_provider_approved');
 
-            // Index for user reviews
-            $table->index(['user_id', 'created_at'], 'idx_reviews_user_created');
+            // Index for client reviews
+            $table->index(['client_id', 'created_at'], 'idx_reviews_client_created');
 
             // Index for booking reviews
             $table->index(['booking_id'], 'idx_reviews_booking');
 
             // Index for flagged reviews
-            $table->index(['is_flagged', 'is_approved'], 'idx_reviews_flagged_approved');
+            $table->index(['is_flagged', 'approval_status'], 'idx_reviews_flagged_approved');
         });
 
         // Notifications table indexes
@@ -154,7 +154,7 @@ return new class extends Migration
             $table->index(['code', 'is_active'], 'idx_promo_codes_code_active');
 
             // Index for date-based queries
-            $table->index(['is_active', 'start_date', 'end_date'], 'idx_promo_codes_active_dates');
+            $table->index(['is_active', 'valid_from', 'valid_until'], 'idx_promo_codes_active_dates');
         });
 
         // Withdrawal requests table indexes
@@ -233,7 +233,7 @@ return new class extends Migration
         // Drop payments indexes
         Schema::table('payments', function (Blueprint $table) {
             $table->dropIndex('idx_payments_booking_status');
-            $table->dropIndex('idx_payments_user_status_created');
+            $table->dropIndex('idx_payments_status_created');
             $table->dropIndex('idx_payments_gateway_id');
             $table->dropIndex('idx_payments_method_status');
         });
@@ -248,7 +248,7 @@ return new class extends Migration
         // Drop reviews indexes
         Schema::table('reviews', function (Blueprint $table) {
             $table->dropIndex('idx_reviews_provider_approved');
-            $table->dropIndex('idx_reviews_user_created');
+            $table->dropIndex('idx_reviews_client_created');
             $table->dropIndex('idx_reviews_booking');
             $table->dropIndex('idx_reviews_flagged_approved');
         });

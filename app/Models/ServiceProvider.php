@@ -17,6 +17,7 @@ class ServiceProvider extends Model implements HasMedia
         'user_id',
         'business_name',
         'business_type',
+        'provider_category_id',
         'description',
         'license_number',
         'commercial_register',
@@ -68,6 +69,11 @@ class ServiceProvider extends Model implements HasMedia
     public function city()
     {
         return $this->belongsTo(City::class);
+    }
+
+    public function providerCategory()
+    {
+        return $this->belongsTo(ProviderCategory::class, 'provider_category_id');
     }
 
     public function services()

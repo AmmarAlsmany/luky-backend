@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\UserAddressController;
 use App\Http\Controllers\Api\PromoCodeController;
+use App\Http\Controllers\Api\ProviderCategoryController;
 
 // Public routes - No authentication required
 Route::prefix('v1')->group(function () {
@@ -33,6 +34,9 @@ Route::prefix('v1')->group(function () {
 
     // Service Categories
     Route::get('/service-categories', [ServiceController::class, 'categories']);
+
+    // Provider Categories
+    Route::get('/provider-categories', [ProviderCategoryController::class, 'index']);
 
     // Provider Discovery
     Route::get('/providers', [ServiceController::class, 'providers']);
