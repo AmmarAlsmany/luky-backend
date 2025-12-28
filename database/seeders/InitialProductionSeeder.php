@@ -30,7 +30,10 @@ class InitialProductionSeeder extends Seeder
         // 4. Create Cities (English & Arabic)
         $this->createCities();
 
-        // 5. Create Super Admin User
+        // 5. Create Provider Categories
+        $this->call(ProviderCategorySeeder::class);
+
+        // 6. Create Super Admin User
         $this->createSuperAdmin();
 
         $this->command->info('✅ Initial production data seeded successfully!');
