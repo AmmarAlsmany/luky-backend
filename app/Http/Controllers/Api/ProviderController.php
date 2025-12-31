@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\Rule;
 use App\Http\Resources\ServiceProviderResource;
 use App\Http\Resources\ServiceResource;
 use App\Models\ProviderPendingChange;
@@ -599,7 +600,12 @@ class ProviderController extends Controller
 
         $validated = $request->validate([
             'category_id' => 'required|exists:service_categories,id',
-            'provider_service_category_id' => 'sometimes|exists:provider_service_categories,id',
+            'provider_service_category_id' => [
+                'sometimes',
+                Rule::exists('provider_service_categories', 'id')->where(function ($query) use ($provider) {
+                    $query->where('provider_id', $provider->id);
+                })
+            ],
             'name' => 'required|string|max:255',
             'name_en' => 'nullable|string|max:255',
             'name_ar' => 'nullable|string|max:255',
@@ -671,7 +677,12 @@ class ProviderController extends Controller
 
         $validated = $request->validate([
             'category_id' => 'sometimes|exists:service_categories,id',
-            'provider_service_category_id' => 'sometimes|exists:provider_service_categories,id',
+            'provider_service_category_id' => [
+                'sometimes',
+                Rule::exists('provider_service_categories', 'id')->where(function ($query) use ($provider) {
+                    $query->where('provider_id', $provider->id);
+                })
+            ],
             'name' => 'sometimes|string|max:255',
             'name_en' => 'nullable|string|max:255',
             'name_ar' => 'nullable|string|max:255',
