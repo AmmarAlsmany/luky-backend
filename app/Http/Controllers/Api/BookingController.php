@@ -130,6 +130,13 @@ class BookingController extends Controller
                     ]);
                 }
 
+                // Check if promo code is provider-specific and matches the booking provider
+                if ($promoCode->provider_id && $promoCode->provider_id !== $validated['provider_id']) {
+                    throw ValidationException::withMessages([
+                        'promo_code' => ['This promo code is not valid for this provider']
+                    ]);
+                }
+
                 // Validate promo code
                 if (!$promoCode->isValid()) {
                     throw ValidationException::withMessages([

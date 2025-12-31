@@ -47,6 +47,7 @@ class OtpController extends Controller
 
         // Check if user exists for login type
         if ($type === 'login') {
+            // Only get active (non-deleted) users for login
             $user = User::where('phone', $phone)->first();
             if (!$user) {
                 throw ValidationException::withMessages([
@@ -78,6 +79,8 @@ class OtpController extends Controller
 
         // Check if user already exists for registration
         if ($type === 'registration') {
+            // Only check for active (non-deleted) users
+            // Soft-deleted accounts will be permanently deleted during registration
             $user = User::where('phone', $phone)->first();
             if ($user) {
                 throw ValidationException::withMessages([
@@ -210,7 +213,14 @@ class OtpController extends Controller
 
         // For login, return user and token immediately
         if ($type === 'login') {
+            // Only get active (non-deleted) users for login
             $user = User::where('phone', $phone)->first();
+
+            if (!$user) {
+                throw ValidationException::withMessages([
+                    'phone' => ['Account not found. It may have been deleted.']
+                ]);
+            }
 
             // CRITICAL: Double-check app type matches user type (second layer of validation)
             if ($appType && $user->user_type !== $appType) {

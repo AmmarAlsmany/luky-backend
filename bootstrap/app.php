@@ -28,6 +28,11 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\SetLocale::class,
         ]);
 
+        // Add SetLocale middleware to API group for multilingual API responses
+        $middleware->api(append: [
+            \App\Http\Middleware\SetLocale::class,
+        ]);
+
         // Handle API authentication - return JSON instead of redirecting to login
         $middleware->redirectGuestsTo(function ($request) {
             if ($request->expectsJson() || $request->is('api/*')) {

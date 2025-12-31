@@ -13,7 +13,9 @@ class ProviderCategoryController extends Controller
      */
     public function index(): JsonResponse
     {
-        $categories = ProviderCategory::active()->get();
+        $categories = ProviderCategory::active()
+            ->orderBy('sort_order', 'asc')
+            ->get();
 
         return response()->json([
             'success' => true,

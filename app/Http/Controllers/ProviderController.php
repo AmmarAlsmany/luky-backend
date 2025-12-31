@@ -613,10 +613,21 @@ class ProviderController extends Controller
                 'is_active' => $validated['status'] === 'active',
             ]);
 
-            // Sync ServiceProvider is_active field
-            $providerProfile->update([
+            // Update ServiceProvider status
+            $providerUpdate = [
                 'is_active' => $validated['status'] === 'active',
-            ]);
+            ];
+
+            // If activating a rejected provider, approve them and clear rejection
+            if ($validated['status'] === 'active' && $providerProfile->verification_status === 'rejected') {
+                $providerUpdate['verification_status'] = 'approved';
+                $providerUpdate['rejection_reason'] = null;
+                $providerUpdate['verified_at'] = now();
+            }
+            // If deactivating an approved provider, don't change verification status
+            // Just set is_active to false
+
+            $providerProfile->update($providerUpdate);
 
             DB::commit();
 
@@ -671,8 +682,8 @@ class ProviderController extends Controller
 
                 $message = 'Provider approved successfully';
             } else {
-                // Log rejection details before deletion
-                \Log::info('=== PROVIDER REJECTED AND DELETED ===', [
+                // Log rejection details
+                \Log::info('=== PROVIDER REJECTED ===', [
                     'provider_id' => $providerProfile->id,
                     'user_id' => $provider->id,
                     'business_name' => $providerProfile->business_name,
@@ -682,20 +693,28 @@ class ProviderController extends Controller
                     'admin_id' => auth()->user()->id,
                 ]);
 
-                // Send rejection notification before deleting
+                // Update provider profile with rejection details
+                $providerProfile->update([
+                    'verification_status' => 'rejected',
+                    'rejection_reason' => $validated['notes'] ?? 'Application rejected',
+                    'is_active' => false,
+                    'verified_at' => null,
+                ]);
+
+                // Deactivate user account so they can't use the app
+                $provider->update([
+                    'status' => 'inactive',
+                    'is_active' => false,
+                ]);
+
+                // Send rejection notification
                 $this->notificationService->sendProviderRejected(
                     $provider->id,
                     $providerProfile->business_name,
                     $validated['notes'] ?? ''
                 );
 
-                // Hard delete provider profile (permanently remove from database)
-                $providerProfile->forceDelete();
-
-                // Hard delete user account to free up email and phone (permanently remove)
-                $provider->forceDelete();
-
-                $message = 'Provider rejected and account permanently deleted. Email and phone are now available for re-registration.';
+                $message = 'Provider rejected. Account is now inactive. Provider can login to see rejection reason.';
             }
 
             DB::commit();

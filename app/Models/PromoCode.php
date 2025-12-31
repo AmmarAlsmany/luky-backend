@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Carbon\Carbon;
+use App\Models\Service;
 
 class PromoCode extends Model
 {
@@ -15,6 +16,7 @@ class PromoCode extends Model
         'description',
         'discount_type',
         'discount_value',
+        'free_service_id',
         'min_booking_amount',
         'max_discount_amount',
         'usage_limit',
@@ -27,6 +29,7 @@ class PromoCode extends Model
         'applicable_services',
         'applicable_categories',
         'created_by',
+        'provider_id',
     ];
 
     protected $casts = [
@@ -49,6 +52,16 @@ class PromoCode extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function provider(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'provider_id');
+    }
+
+    public function freeService(): BelongsTo
+    {
+        return $this->belongsTo(Service::class, 'free_service_id');
     }
 
     // Helper methods
@@ -92,8 +105,16 @@ class PromoCode extends Model
 
     public function calculateDiscount(float $orderAmount): float
     {
-        if ($this->discount_type === 'fixed') {
+        if ($this->discount_type === 'fixed' || $this->discount_type === 'fixed_amount') {
             return min($this->discount_value, $orderAmount);
+        }
+
+        if ($this->discount_type === 'free_service') {
+            // Get the service price from the relationship
+            if ($this->freeService) {
+                return min($this->freeService->price, $orderAmount);
+            }
+            return 0;
         }
 
         // Percentage discount

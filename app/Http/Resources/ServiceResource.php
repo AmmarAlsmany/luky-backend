@@ -36,6 +36,7 @@ class ServiceResource extends JsonResource
 
             // Category info
             'category_id' => $this->category_id,
+            'provider_service_category_id' => $this->provider_service_category_id,
             'category' => $this->whenLoaded('category', function () {
                 return new ServiceCategoryResource($this->category);
             }),

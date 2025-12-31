@@ -12,12 +12,27 @@ class ProviderResource extends JsonResource
             'business_name' => $this->business_name,
             'business_type' => $this->business_type,
             'business_type_display' => $this->getBusinessTypeDisplay(),
+
+            // Provider Category - NEW: Show actual category information
+            'provider_category_id' => $this->provider_category_id,
+            'provider_category' => $this->whenLoaded('providerCategory', function () {
+                return [
+                    'id' => $this->providerCategory->id,
+                    'name_ar' => $this->providerCategory->name_ar,
+                    'name_en' => $this->providerCategory->name_en,
+                    'description_ar' => $this->providerCategory->description_ar,
+                    'description_en' => $this->providerCategory->description_en,
+                    'icon' => $this->providerCategory->icon,
+                    'color' => $this->providerCategory->color,
+                ];
+            }),
+
             'description' => $this->description,
             'average_rating' => (float) $this->average_rating,
             'total_reviews' => $this->total_reviews,
             'is_featured' => $this->is_featured,
             'is_active' => $this->is_active,
-            
+
             // Location information
             'city' => $this->whenLoaded('city', function () {
                 return [

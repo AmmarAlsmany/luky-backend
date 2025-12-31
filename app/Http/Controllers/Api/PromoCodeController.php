@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\PromoCode;
+use App\Models\Service;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
@@ -43,6 +44,21 @@ class PromoCodeController extends Controller
                 'success' => false,
                 'message' => 'Invalid promo code',
             ], 404);
+        }
+
+        // Check if promo code is provider-specific
+        if ($promoCode->provider_id) {
+            // Validate that all services belong to the same provider as the promo code
+            $services = Service::whereIn('id', $serviceIds)->get();
+
+            foreach ($services as $service) {
+                if ($service->provider_id !== $promoCode->provider_id) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This promo code is not valid for the selected provider',
+                    ], 400);
+                }
+            }
         }
 
         // Check if promo code is valid

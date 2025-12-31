@@ -450,6 +450,7 @@ class NotificationController extends Controller
                         'sender_name' => $message->sender->name,
                         'sender_type' => $message->sender_type,
                         'message_type' => $message->message_type,
+                        'image_url' => $message->image_url ?? null,
                         'is_read' => $message->is_read,
                         'created_at' => $message->created_at->format('Y-m-d H:i:s'),
                     ];

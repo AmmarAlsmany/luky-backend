@@ -39,7 +39,10 @@ class ServiceProvider extends Model implements HasMedia
         'account_title',
         'account_number',
         'iban',
-        'currency'
+        'currency',
+        'acknowledgment_accepted',
+        'undertaking_accepted',
+        'agreements_accepted_at'
     ];
 
     protected $casts = [
@@ -53,6 +56,9 @@ class ServiceProvider extends Model implements HasMedia
         'latitude' => 'decimal:8',
         'longitude' => 'decimal:8',
         'verified_at' => 'datetime',
+        'acknowledgment_accepted' => 'boolean',
+        'undertaking_accepted' => 'boolean',
+        'agreements_accepted_at' => 'datetime',
     ];
 
     protected $appends = [

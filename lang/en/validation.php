@@ -178,8 +178,22 @@ return [
     */
 
     'custom' => [
-        'attribute-name' => [
-            'rule-name' => 'custom-message',
+        'email' => [
+            'invalid_format' => 'The email must be a valid email address.',
+            'fake_email' => 'The email appears to be invalid. Please use a real email address.',
+            'temp_email' => 'Temporary email addresses are not allowed. Please use a permanent email address.',
+            'invalid_domain' => 'The email must have a valid domain.',
+            'invalid_tld' => 'The email must have a valid domain extension.',
+            'domain_appears_invalid' => 'The email domain appears to be invalid.',
+            'domain_cannot_receive_email' => 'The email domain does not appear to be configured to receive emails.',
+            'suspicious_email' => 'The email appears to be invalid. Please use a real email address.',
+            'invalid_email_format' => 'The email format is invalid.',
+        ],
+        'acknowledgment_accepted' => [
+            'accepted' => 'The acknowledgment must be accepted.',
+        ],
+        'undertaking_accepted' => [
+            'accepted' => 'The undertaking agreement must be accepted.',
         ],
     ],
 
@@ -194,6 +208,13 @@ return [
     |
     */
 
-    'attributes' => [],
+    'attributes' => [
+        'name' => 'name',
+        'email' => 'email',
+        'phone' => 'phone number',
+        'password' => 'password',
+        'acknowledgment_accepted' => 'acknowledgment',
+        'undertaking_accepted' => 'undertaking agreement',
+    ],
 
 ];

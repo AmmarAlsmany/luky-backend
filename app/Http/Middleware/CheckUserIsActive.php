@@ -21,7 +21,26 @@ class CheckUserIsActive
 
             // Check both is_active flag and status field
             if (!$user->is_active || $user->status !== 'active') {
-                // User is logged in but not active
+                // Allow rejected providers to access profile endpoints to see rejection reason
+                $allowedPaths = [
+                    'api/v1/user/profile',
+                    'api/v1/provider/profile',
+                ];
+
+                $isAllowedPath = false;
+                foreach ($allowedPaths as $path) {
+                    if ($request->is($path)) {
+                        $isAllowedPath = true;
+                        break;
+                    }
+                }
+
+                // If trying to access profile endpoint, allow it so they can see rejection reason
+                if ($isAllowedPath) {
+                    return $next($request);
+                }
+
+                // For all other endpoints, block access
                 $statusMessage = !$user->is_active
                     ? 'Your account is inactive. Please contact support.'
                     : 'Your account has been ' . $user->status . '. Please contact support.';

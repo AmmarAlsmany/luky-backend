@@ -282,7 +282,7 @@ class ProviderManagementController extends Controller
     {
         $provider = User::whereHas('roles', function ($q) {
             $q->where('name', 'provider');
-        })->find($id);
+        })->with('providerProfile')->find($id);
 
         if (!$provider) {
             return response()->json([
@@ -308,10 +308,23 @@ class ProviderManagementController extends Controller
             'is_active' => $request->status === 'active',
         ]);
 
+        // If activating a rejected provider, also approve them and clear rejection
+        if ($request->status === 'active' && $provider->providerProfile) {
+            $providerProfile = $provider->providerProfile;
+            if ($providerProfile->verification_status === 'rejected') {
+                $providerProfile->update([
+                    'verification_status' => 'approved',
+                    'rejection_reason' => null,
+                    'verified_at' => now(),
+                    'is_active' => true,
+                ]);
+            }
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Provider status updated successfully',
-            'data' => ['provider' => $provider],
+            'data' => ['provider' => $provider->fresh(['providerProfile'])],
         ]);
     }
 
@@ -344,19 +357,29 @@ class ProviderManagementController extends Controller
             ], 422);
         }
 
-        $status = $request->action === 'approve' ? 'verified' : 'rejected';
+        // Use 'approved' instead of 'verified' to match resources and other controllers
+        $verificationStatus = $request->action === 'approve' ? 'approved' : 'rejected';
 
         $provider->providerProfile->update([
-            'verification_status' => $status,
+            'verification_status' => $verificationStatus,
             'verification_notes' => $request->notes,
             'verified_at' => $request->action === 'approve' ? now() : null,
+            'rejection_reason' => $request->action === 'reject' ? $request->notes : null,
         ]);
 
-        // If approved, activate the provider account
+        // Update user account status
         if ($request->action === 'approve') {
+            // Activate the provider account
             $provider->update([
                 'status' => 'active',
                 'is_active' => true,
+            ]);
+        } else {
+            // For rejection, deactivate account so they can't use the app
+            // They will be logged out and can see rejection reason if they try to login again
+            $provider->update([
+                'status' => 'inactive',
+                'is_active' => false,
             ]);
         }
 

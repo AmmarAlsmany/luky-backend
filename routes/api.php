@@ -14,6 +14,8 @@ use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\UserAddressController;
 use App\Http\Controllers\Api\PromoCodeController;
 use App\Http\Controllers\Api\ProviderCategoryController;
+use App\Http\Controllers\Api\ProviderServiceCategoryController;
+use App\Http\Controllers\Api\Provider\PromoCodeController as ProviderPromoCodeController;
 
 // Public routes - No authentication required
 Route::prefix('v1')->group(function () {
@@ -28,6 +30,7 @@ Route::prefix('v1')->group(function () {
     // Public Data APIs
     Route::get('/cities', [LocationController::class, 'cities']);
     Route::get('/cities/search', [LocationController::class, 'searchCities']);
+    Route::post('/cities/from-coordinates', [LocationController::class, 'getCityFromCoordinates']);
     Route::get('/cities/{id}', [LocationController::class, 'cityById']);
     Route::get('/app-settings', [LocationController::class, 'appSettings']);
     Route::get('/banners', [LocationController::class, 'banners']);
@@ -93,6 +96,14 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active', 'validate.app.type'])
         Route::put('/provider/services/{id}', [ProviderController::class, 'updateService']);
         Route::delete('/provider/services/{id}', [ProviderController::class, 'deleteService']);
 
+        // Provider Service Categories (Custom Categories)
+        Route::get('/provider/categories', [ProviderServiceCategoryController::class, 'index']);
+        Route::post('/provider/categories', [ProviderServiceCategoryController::class, 'store']);
+        Route::put('/provider/categories/{id}', [ProviderServiceCategoryController::class, 'update']);
+        Route::delete('/provider/categories/{id}', [ProviderServiceCategoryController::class, 'destroy']);
+        Route::post('/provider/categories/migrate', [ProviderServiceCategoryController::class, 'migrate']);
+        Route::get('/provider/categories/migration-status', [ProviderServiceCategoryController::class, 'checkMigrationStatus']);
+
         // Clients
         Route::get('/provider/clients', [ProviderController::class, 'getClients']);
         Route::post('/provider/send-notification', [ProviderController::class, 'sendNotificationToClients']);
@@ -110,6 +121,15 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active', 'validate.app.type'])
         // Analytics
         Route::get('/provider/analytics', [ProviderController::class, 'getAnalytics']);
         Route::get('/provider/daily-stats', [ProviderController::class, 'getDailyBookingStats']);
+
+        // Promo Codes (Provider-owned)
+        Route::get('/provider/promo-codes', [ProviderPromoCodeController::class, 'index']);
+        Route::get('/provider/promo-codes/{id}', [ProviderPromoCodeController::class, 'show']);
+        Route::post('/provider/promo-codes', [ProviderPromoCodeController::class, 'store']);
+        Route::put('/provider/promo-codes/{id}', [ProviderPromoCodeController::class, 'update']);
+        Route::delete('/provider/promo-codes/{id}', [ProviderPromoCodeController::class, 'destroy']);
+        Route::patch('/provider/promo-codes/{id}/toggle', [ProviderPromoCodeController::class, 'toggle']);
+        Route::post('/provider/promo-codes/validate', [ProviderPromoCodeController::class, 'validate']);
     });
 
     // Client booking routes
@@ -124,6 +144,7 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active', 'validate.app.type'])
     // Provider booking routes
     Route::middleware(['role:provider'])->group(function () {
         Route::get('/provider/bookings', [BookingController::class, 'providerBookings']);
+        Route::get('/provider/bookings/{id}', [BookingController::class, 'show']);
         Route::put('/provider/bookings/{id}/accept', [BookingController::class, 'acceptBooking']);
         Route::put('/provider/bookings/{id}/reject', [BookingController::class, 'rejectBooking']);
         Route::get('/provider/schedule', [BookingController::class, 'providerSchedule']);

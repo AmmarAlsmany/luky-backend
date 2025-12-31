@@ -15,6 +15,7 @@ use App\Http\Resources\ServiceProviderResource;
 use App\Http\Resources\ServiceResource;
 use App\Models\ProviderPendingChange;
 use App\Services\NotificationService;
+use App\Rules\ValidEmail;
 
 class ProviderController extends Controller
 {
@@ -39,7 +40,7 @@ class ProviderController extends Controller
             // Admin creating a new provider
             $validated = $request->validate([
                 'name' => 'required|string|max:255',
-                'email' => 'required|email|unique:users,email',
+                'email' => ['required', 'email', 'unique:users,email', new ValidEmail()],
                 'phone' => 'required|string|unique:users,phone',
                 'business_name' => 'required|string|max:255',
                 'provider_category_id' => 'required|exists:provider_categories,id',
@@ -50,6 +51,9 @@ class ProviderController extends Controller
                 'longitude' => 'required|numeric|between:-180,180',
                 'working_hours' => 'nullable|array',
                 'off_days' => 'nullable|array',
+                'license_number' => 'nullable|string|max:255',
+                'commercial_register' => 'nullable|string|max:255',
+                'municipal_license' => 'nullable|string|max:255',
             ]);
 
             DB::beginTransaction();
@@ -83,6 +87,9 @@ class ProviderController extends Controller
                     'longitude' => $validated['longitude'] ?? null,
                     'working_hours' => $validated['working_hours'] ?? [],
                     'off_days' => $validated['off_days'] ?? [],
+                    'license_number' => $validated['license_number'] ?? null,
+                    'commercial_register' => $validated['commercial_register'] ?? null,
+                    'municipal_license' => $validated['municipal_license'] ?? null,
                     'verification_status' => 'pending',
                     'commission_rate' => 15.00,
                     'is_active' => false,
@@ -94,7 +101,7 @@ class ProviderController extends Controller
                     'success' => true,
                     'message' => 'Provider created successfully by admin.',
                     'data' => [
-                        'provider' => new ServiceProviderResource($provider->load(['user', 'city'])),
+                        'provider' => new ServiceProviderResource($provider->load(['user', 'city', 'providerCategory'])),
                     ]
                 ], 201);
             } catch (\Exception $e) {
@@ -118,7 +125,7 @@ class ProviderController extends Controller
                     'success' => true,
                     'message' => 'You are already registered as a provider.',
                     'data' => [
-                        'provider' => new ServiceProviderResource($provider->load(['user', 'city'])),
+                        'provider' => new ServiceProviderResource($provider->load(['user', 'city', 'providerCategory'])),
                         'next_step' => $provider->verification_status === 'pending' ? 'upload_documents' : 'complete'
                     ]
                 ], 200);
@@ -140,6 +147,11 @@ class ProviderController extends Controller
             'working_hours.*.open' => 'required|date_format:H:i',
             'working_hours.*.close' => 'required|date_format:H:i',
             'off_days' => 'nullable|array',
+            'license_number' => 'nullable|string|max:255',
+            'commercial_register' => 'nullable|string|max:255',
+            'municipal_license' => 'nullable|string|max:255',
+            'acknowledgment_accepted' => 'required|boolean|accepted',
+            'undertaking_accepted' => 'required|boolean|accepted',
         ]);
 
         DB::beginTransaction();
@@ -173,6 +185,12 @@ class ProviderController extends Controller
                     'longitude' => $validated['longitude'] ?? null,
                     'working_hours' => $validated['working_hours'],
                     'off_days' => $validated['off_days'] ?? [],
+                    'license_number' => $validated['license_number'] ?? null,
+                    'commercial_register' => $validated['commercial_register'] ?? null,
+                    'municipal_license' => $validated['municipal_license'] ?? null,
+                    'acknowledgment_accepted' => $validated['acknowledgment_accepted'],
+                    'undertaking_accepted' => $validated['undertaking_accepted'],
+                    'agreements_accepted_at' => now(),
                 ]);
 
                 DB::commit();
@@ -181,7 +199,7 @@ class ProviderController extends Controller
                     'success' => true,
                     'message' => 'Provider registration updated successfully. Please upload required documents.',
                     'data' => [
-                        'provider' => new ServiceProviderResource($provider->load(['user', 'city'])),
+                        'provider' => new ServiceProviderResource($provider->load(['user', 'city', 'providerCategory'])),
                         'next_step' => 'upload_documents'
                     ]
                 ], 200);
@@ -200,6 +218,12 @@ class ProviderController extends Controller
                 'longitude' => $validated['longitude'] ?? null,
                 'working_hours' => $validated['working_hours'],
                 'off_days' => $validated['off_days'] ?? [],
+                'license_number' => $validated['license_number'] ?? null,
+                'commercial_register' => $validated['commercial_register'] ?? null,
+                'municipal_license' => $validated['municipal_license'] ?? null,
+                'acknowledgment_accepted' => $validated['acknowledgment_accepted'],
+                'undertaking_accepted' => $validated['undertaking_accepted'],
+                'agreements_accepted_at' => now(),
                 'verification_status' => 'pending',
                 'commission_rate' => 15.00, // Default 15%
                 'is_active' => false, // Inactive until approved
@@ -211,7 +235,7 @@ class ProviderController extends Controller
                 'success' => true,
                 'message' => 'Provider registration submitted successfully. Please upload required documents.',
                 'data' => [
-                    'provider' => new ServiceProviderResource($provider->load(['user', 'city'])),
+                    'provider' => new ServiceProviderResource($provider->load(['user', 'city', 'providerCategory'])),
                     'next_step' => 'upload_documents'
                 ]
             ], 201);
@@ -297,7 +321,7 @@ class ProviderController extends Controller
     public function getProfile(Request $request): JsonResponse
     {
         $user = $request->user();
-        $provider = $user->providerProfile()->with(['city', 'services', 'documents'])->first();
+        $provider = $user->providerProfile()->with(['city', 'services', 'documents', 'providerCategory'])->first();
 
         if (!$provider) {
             return response()->json([
@@ -374,7 +398,7 @@ class ProviderController extends Controller
 
         $validated = $request->validate([
             'business_name' => 'sometimes|string|max:255',
-            'category_id' => 'sometimes|exists:service_categories,id',
+            'category_id' => 'sometimes|exists:provider_categories,id',
             'description' => 'sometimes|string|max:1000',
             'city_id' => 'sometimes|exists:cities,id',
             'address' => 'sometimes|string|max:500',
@@ -387,11 +411,10 @@ class ProviderController extends Controller
             'municipal_license' => 'sometimes|nullable|string|max:255',
         ]);
 
-        // If category is being updated, map it to business_type
+        // If category is being updated, rename to provider_category_id
         if (isset($validated['category_id'])) {
-            $category = \App\Models\ServiceCategory::findOrFail($validated['category_id']);
-            $validated['business_type'] = $category->getBusinessType();
-            unset($validated['category_id']); // Remove category_id as it's not a provider field
+            $validated['provider_category_id'] = $validated['category_id'];
+            unset($validated['category_id']);
         }
 
         \Log::info('=== VALIDATED DATA ===', [
@@ -399,82 +422,21 @@ class ProviderController extends Controller
             'provider_before' => $provider->toArray(),
         ]);
 
-        // Store old values for comparison
-        $oldValues = [];
-        foreach (array_keys($validated) as $field) {
-            $oldValues[$field] = $provider->{$field};
-        }
+        // Apply changes directly without requiring approval
+        $provider->update($validated);
 
-        // Check if there's already a pending change request
-        $existingPendingChange = ProviderPendingChange::where('provider_id', $provider->id)
-            ->where('status', 'pending')
-            ->first();
-
-        if ($existingPendingChange) {
-            // Update the existing pending change request
-            $existingPendingChange->update([
-                'changed_fields' => $validated,
-                'old_values' => $oldValues,
-            ]);
-
-            \Log::info('=== PENDING CHANGE UPDATED ===', [
-                'pending_change_id' => $existingPendingChange->id,
-                'changed_fields' => $validated,
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Your profile changes have been updated and are waiting for admin approval.',
-                'requires_approval' => true,
-                'data' => [
-                    'current_profile' => new ServiceProviderResource($provider->fresh()),
-                    'pending_changes' => [
-                        'id' => $existingPendingChange->id,
-                        'status' => 'pending',
-                        'submitted_data' => $existingPendingChange->changed_fields,
-                        'current_data' => $oldValues,
-                        'submitted_at' => $existingPendingChange->created_at->format('Y-m-d H:i:s'),
-                        'note' => 'These changes will be applied after admin approval'
-                    ]
-                ]
-            ]);
-        }
-
-        // Create new pending change request
-        $pendingChange = ProviderPendingChange::create([
+        \Log::info('=== PROFILE UPDATED SUCCESSFULLY ===', [
             'provider_id' => $provider->id,
-            'changed_fields' => $validated,
-            'old_values' => $oldValues,
-            'status' => 'pending',
+            'updated_fields' => $validated,
+            'provider_after' => $provider->fresh()->toArray(),
         ]);
-
-        \Log::info('=== PENDING CHANGE CREATED ===', [
-            'pending_change_id' => $pendingChange->id,
-            'changed_fields' => $validated,
-            'old_values' => $oldValues,
-        ]);
-
-        // Send notification to admins
-        $this->notificationService->sendProviderChangeRequest(
-            $provider->id,
-            $provider->business_name,
-            $validated
-        );
 
         return response()->json([
             'success' => true,
-            'message' => 'Your profile changes have been submitted and are waiting for admin approval.',
-            'requires_approval' => true,
+            'message' => 'Profile updated successfully.',
+            'requires_approval' => false,
             'data' => [
-                'current_profile' => new ServiceProviderResource($provider->fresh()),
-                'pending_changes' => [
-                    'id' => $pendingChange->id,
-                    'status' => 'pending',
-                    'submitted_data' => $pendingChange->changed_fields,
-                    'current_data' => $oldValues,
-                    'submitted_at' => $pendingChange->created_at->format('Y-m-d H:i:s'),
-                    'note' => 'These changes will be applied after admin approval'
-                ]
+                'provider' => new ServiceProviderResource($provider->fresh()),
             ]
         ]);
     }
@@ -637,6 +599,7 @@ class ProviderController extends Controller
 
         $validated = $request->validate([
             'category_id' => 'required|exists:service_categories,id',
+            'provider_service_category_id' => 'sometimes|exists:provider_service_categories,id',
             'name' => 'required|string|max:255',
             'name_en' => 'nullable|string|max:255',
             'name_ar' => 'nullable|string|max:255',
@@ -660,6 +623,7 @@ class ProviderController extends Controller
 
         $service = $provider->services()->create([
             'category_id' => $validated['category_id'],
+            'provider_service_category_id' => $validated['provider_service_category_id'] ?? null,
             'name' => $validated['name'],
             'name_en' => $validated['name_en'] ?? null,
             'name_ar' => $validated['name_ar'] ?? null,
@@ -707,6 +671,7 @@ class ProviderController extends Controller
 
         $validated = $request->validate([
             'category_id' => 'sometimes|exists:service_categories,id',
+            'provider_service_category_id' => 'sometimes|exists:provider_service_categories,id',
             'name' => 'sometimes|string|max:255',
             'name_en' => 'nullable|string|max:255',
             'name_ar' => 'nullable|string|max:255',

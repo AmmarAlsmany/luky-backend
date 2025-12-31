@@ -33,7 +33,10 @@ class InitialProductionSeeder extends Seeder
         // 5. Create Provider Categories
         $this->call(ProviderCategorySeeder::class);
 
-        // 6. Create Super Admin User
+        // 6. Create Static Pages
+        $this->call(StaticPagesSeeder::class);
+
+        // 7. Create Super Admin User
         $this->createSuperAdmin();
 
         $this->command->info('✅ Initial production data seeded successfully!');

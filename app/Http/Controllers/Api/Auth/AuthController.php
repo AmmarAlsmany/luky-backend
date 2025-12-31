@@ -11,6 +11,7 @@ use Illuminate\Validation\ValidationException;
 use App\Http\Resources\UserResource;
 use App\Services\PhoneNumberService;
 use App\Rules\SaudiPhoneNumber;
+use App\Rules\ValidEmail;
 use Illuminate\Support\Facades\DB;
 
 class AuthController extends Controller
@@ -67,66 +68,109 @@ class AuthController extends Controller
     {
         $phoneRule = new SaudiPhoneNumber();
 
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'nullable|email|unique:users,email', // Optional field (aligned with admin)
-            'phone' => [
-                'required',
-                'string',
-                $phoneRule,
-                'unique:users,phone'
-            ],
-            'user_type' => 'required|in:client,provider',
-            'city_id' => 'required|exists:cities,id',
-            'date_of_birth' => 'required|date|before:today',
-            'gender' => 'required|in:male,female',
-            'otp_token' => 'required|integer', // OTP verification ID
-            'address' => 'sometimes|string|max:500',
-            'latitude' => 'sometimes|numeric|between:-90,90',
-            'longitude' => 'sometimes|numeric|between:-180,180'
-        ]);
-
-        // Normalize the phone number
+        // Normalize the phone number for validation
         $normalizedPhone = $this->phoneService->normalize($request->phone);
 
+        // Check if there's a soft-deleted account with this phone
+        $deletedUser = User::onlyTrashed()->where('phone', $normalizedPhone)->first();
+
+        // If soft-deleted account exists, permanently delete it to free up the phone number
+        if ($deletedUser) {
+            // Permanently delete provider profile if exists
+            if ($deletedUser->providerProfile) {
+                $deletedUser->providerProfile()->forceDelete();
+            }
+            // Permanently delete user
+            $deletedUser->forceDelete();
+        }
+
+        // Check if user already exists with this phone (from previous registration step)
+        $existingUser = User::where('phone', $normalizedPhone)->first();
+
         // Verify OTP token is valid
-        $otpVerification = OtpVerification::where('id', $request->otp_token)
-            ->where('phone', $normalizedPhone)
+        $otpVerification = OtpVerification::where('phone', $normalizedPhone)
             ->where('type', 'registration')
             ->where('is_verified', true)
-            ->where('verified_at', '>=', now()->subMinutes(30)) // Valid for 30 minutes after verification
+            ->where('verified_at', '>=', now()->subMinutes(30))
             ->first();
 
-        if (!$otpVerification) {
+        if (!$otpVerification && !$existingUser) {
             throw ValidationException::withMessages([
                 'otp_token' => ['Invalid or expired OTP verification.']
             ]);
         }
 
-        // Create user
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email, // Optional field
-            'phone' => $normalizedPhone,
-            'user_type' => $request->user_type,
-            'city_id' => $request->city_id,
-            'date_of_birth' => $request->date_of_birth,
-            'gender' => $request->gender,
-            'address' => $request->address,
-            'latitude' => $request->latitude,
-            'longitude' => $request->longitude,
-            'phone_verified_at' => now(),
-            'is_active' => true
-        ]);
+        // Build validation rules
+        $validationRules = [
+            'name' => 'required|string|max:255',
+            'email' => ['nullable', 'email', new ValidEmail()],
+            'phone' => ['required', 'string', $phoneRule],
+            'user_type' => 'required|in:client,provider',
+            'city_id' => 'required|exists:cities,id',
+            'date_of_birth' => 'required|date|before:today',
+            'gender' => 'required|in:male,female',
+            'otp_token' => 'required|integer',
+            'address' => 'sometimes|string|max:500',
+            'latitude' => 'sometimes|numeric|between:-90,90',
+            'longitude' => 'sometimes|numeric|between:-180,180'
+        ];
 
-        // Assign role based on user type
-        $user->assignRole($request->user_type);
+        // Only add unique constraints if this is a new user or email changed
+        if (!$existingUser) {
+            $validationRules['phone'][] = 'unique:users,phone';
+            $validationRules['email'][] = 'unique:users,email';
+        } else {
+            // If user exists, only check uniqueness if email is being changed
+            if ($request->email && $request->email !== $existingUser->email) {
+                $validationRules['email'][] = 'unique:users,email';
+            }
+        }
 
-        // Create API token
-        $token = $user->createToken('mobile-app', ['*'], now()->addDays(30))->plainTextToken;
+        $request->validate($validationRules);
 
-        // Mark OTP as used
-        $otpVerification->delete();
+        // If user exists (editing during registration), update them
+        if ($existingUser) {
+            $existingUser->update([
+                'name' => $request->name,
+                'email' => $request->email,
+                'city_id' => $request->city_id,
+                'date_of_birth' => $request->date_of_birth,
+                'gender' => $request->gender,
+                'address' => $request->address,
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+            ]);
+
+            $user = $existingUser;
+            $token = $user->createToken('mobile-app', ['*'], now()->addDays(30))->plainTextToken;
+        } else {
+            // Create new user
+            $user = User::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'phone' => $normalizedPhone,
+                'user_type' => $request->user_type,
+                'city_id' => $request->city_id,
+                'date_of_birth' => $request->date_of_birth,
+                'gender' => $request->gender,
+                'address' => $request->address,
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude,
+                'phone_verified_at' => now(),
+                'is_active' => true
+            ]);
+
+            // Assign role based on user type
+            $user->assignRole($request->user_type);
+
+            // Create API token
+            $token = $user->createToken('mobile-app', ['*'], now()->addDays(30))->plainTextToken;
+
+            // Mark OTP as used
+            if ($otpVerification) {
+                $otpVerification->delete();
+            }
+        }
 
         return response()->json([
             'success' => true,
@@ -167,7 +211,7 @@ class AuthController extends Controller
 
         $request->validate([
             'name' => 'sometimes|string|max:255',
-            'email' => 'sometimes|email|unique:users,email,' . $user->id,
+            'email' => ['sometimes', 'email', 'unique:users,email,' . $user->id, new ValidEmail()],
             'city_id' => 'sometimes|exists:cities,id',
             'date_of_birth' => 'sometimes|date|before:today',
             'gender' => 'sometimes|in:male,female',
