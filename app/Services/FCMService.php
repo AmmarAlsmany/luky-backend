@@ -100,11 +100,15 @@ class FCMService
                 ->withAndroidConfig([
                     'priority' => 'high',
                     'notification' => [
-                        'channel_id' => 'booking_notifications',
+                        'channel_id' => 'luky_notifications_v4',
+                        'icon' => 'ic_notification',
+                        'color' => '#9C27B0',
                         'sound' => 'default',
                         'default_vibrate_timings' => true,
                         'default_light_settings' => true,
                         'visibility' => 'public',
+                        'notification_priority' => 'PRIORITY_HIGH',
+                        'tag' => 'luky_notification',
                     ],
                 ])
                 ->withApnsConfig([
@@ -239,11 +243,15 @@ class FCMService
                 ->withAndroidConfig([
                     'priority' => 'high',
                     'notification' => [
-                        'channel_id' => 'booking_notifications',
+                        'channel_id' => 'luky_notifications_v4',
+                        'icon' => 'ic_notification',
+                        'color' => '#9C27B0',
                         'sound' => 'default',
                         'default_vibrate_timings' => true,
                         'default_light_settings' => true,
                         'visibility' => 'public',
+                        'notification_priority' => 'PRIORITY_HIGH',
+                        'tag' => 'luky_notification',
                     ],
                 ])
                 ->withApnsConfig([
