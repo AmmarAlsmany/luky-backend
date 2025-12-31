@@ -599,9 +599,9 @@ class ProviderController extends Controller
         }
 
         $validated = $request->validate([
-            'category_id' => 'required|exists:service_categories,id',
+            'category_id' => 'nullable|exists:service_categories,id',
             'provider_service_category_id' => [
-                'sometimes',
+                'required',
                 Rule::exists('provider_service_categories', 'id')->where(function ($query) use ($provider) {
                     $query->where('provider_id', $provider->id);
                 })
@@ -628,8 +628,8 @@ class ProviderController extends Controller
         }
 
         $service = $provider->services()->create([
-            'category_id' => $validated['category_id'],
-            'provider_service_category_id' => $validated['provider_service_category_id'] ?? null,
+            'category_id' => $validated['category_id'] ?? null,
+            'provider_service_category_id' => $validated['provider_service_category_id'],
             'name' => $validated['name'],
             'name_en' => $validated['name_en'] ?? null,
             'name_ar' => $validated['name_ar'] ?? null,
