@@ -66,11 +66,11 @@ class PromoCodeController extends Controller
             $message = 'This promo code is ';
             if (!$promoCode->is_active) {
                 $message .= 'inactive';
-            } elseif (now()->lt($promoCode->start_date)) {
+            } elseif ($promoCode->valid_from && now()->lt($promoCode->valid_from)) {
                 $message .= 'not yet active';
-            } elseif (now()->gt($promoCode->end_date)) {
+            } elseif ($promoCode->valid_until && now()->gt($promoCode->valid_until)) {
                 $message .= 'expired';
-            } elseif ($promoCode->max_uses && $promoCode->total_uses >= $promoCode->max_uses) {
+            } elseif ($promoCode->usage_limit && $promoCode->used_count >= $promoCode->usage_limit) {
                 $message .= 'no longer available (maximum uses reached)';
             }
 

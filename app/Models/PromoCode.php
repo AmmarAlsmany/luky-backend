@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Carbon\Carbon;
 use App\Models\Service;
+use App\Models\ServiceProvider;
 
 class PromoCode extends Model
 {
@@ -56,7 +57,7 @@ class PromoCode extends Model
 
     public function provider(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'provider_id');
+        return $this->belongsTo(ServiceProvider::class, 'provider_id');
     }
 
     public function freeService(): BelongsTo

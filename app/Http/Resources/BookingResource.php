@@ -2,6 +2,7 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Models\AppSetting;
 
 class BookingResource extends JsonResource
 {
@@ -15,6 +16,7 @@ class BookingResource extends JsonResource
             'end_time' => $this->end_time->format('H:i'),
             'status' => $this->status,
             'payment_status' => $this->payment_status,
+            'approval_timeout_minutes' => (int) AppSetting::get('provider_acceptance_timeout_minutes', 30),
             
             'client' => $this->whenLoaded('client', function () {
                 return [

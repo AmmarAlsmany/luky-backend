@@ -71,11 +71,17 @@ class ProviderResource extends JsonResource
                         'available_at_home' => $service->available_at_home ?? false,
                         'home_service_price' => $service->home_service_price ? (float) $service->home_service_price : null,
                         'duration_minutes' => $service->duration_minutes,
+
+                        // Old category (legacy support)
                         'category_id' => $service->category_id,
-                        'category' => $service->category ? [
-                            'name_ar' => $service->category->name_ar,
-                            'name_en' => $service->category->name_en,
-                        ] : null,
+                        'category_name_ar' => $service->category?->name_ar,
+                        'category_name_en' => $service->category?->name_en,
+
+                        // Provider Service Category (NEW - custom categories)
+                        'provider_service_category_id' => $service->provider_service_category_id,
+                        'provider_service_category_name_ar' => $service->providerServiceCategory?->name_ar,
+                        'provider_service_category_name_en' => $service->providerServiceCategory?->name_en,
+
                         'is_active' => $service->is_active,
                         'is_featured' => $service->is_featured ?? false,
                         'average_rating' => $service->average_rating ? (float) $service->average_rating : null,

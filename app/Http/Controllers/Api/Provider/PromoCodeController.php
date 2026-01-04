@@ -18,7 +18,16 @@ class PromoCodeController extends Controller
      */
     public function index(Request $request)
     {
-        $provider = Auth::user();
+        $user = Auth::user();
+        $provider = $user->serviceProvider;
+
+        if (!$provider) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Provider profile not found',
+            ], 404);
+        }
+
         $perPage = $request->input('per_page', 20);
         $page = $request->input('page', 1);
         $isActive = $request->input('is_active');
@@ -55,7 +64,15 @@ class PromoCodeController extends Controller
      */
     public function show($id)
     {
-        $provider = Auth::user();
+        $user = Auth::user();
+        $provider = $user->serviceProvider;
+
+        if (!$provider) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Provider profile not found',
+            ], 404);
+        }
 
         $promoCode = PromoCode::where('id', $id)
             ->where('provider_id', $provider->id)
@@ -80,7 +97,15 @@ class PromoCodeController extends Controller
      */
     public function store(Request $request)
     {
-        $provider = Auth::user();
+        $user = Auth::user();
+        $provider = $user->serviceProvider;
+
+        if (!$provider) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Provider profile not found',
+            ], 404);
+        }
 
         $validator = Validator::make($request->all(), [
             'code' => 'required|string|max:20|min:3|unique:promo_codes,code',
@@ -118,7 +143,7 @@ class PromoCodeController extends Controller
 
         $promoCode = PromoCode::create([
             'provider_id' => $provider->id,
-            'created_by' => $provider->id,
+            'created_by' => $user->id,
             'code' => strtoupper($request->code),
             'description' => $request->description,
             'discount_type' => $discountType,
@@ -148,7 +173,15 @@ class PromoCodeController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $provider = Auth::user();
+        $user = Auth::user();
+        $provider = $user->serviceProvider;
+
+        if (!$provider) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Provider profile not found',
+            ], 404);
+        }
 
         $promoCode = PromoCode::where('id', $id)
             ->where('provider_id', $provider->id)
@@ -250,7 +283,15 @@ class PromoCodeController extends Controller
      */
     public function destroy($id)
     {
-        $provider = Auth::user();
+        $user = Auth::user();
+        $provider = $user->serviceProvider;
+
+        if (!$provider) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Provider profile not found',
+            ], 404);
+        }
 
         $promoCode = PromoCode::where('id', $id)
             ->where('provider_id', $provider->id)
@@ -287,7 +328,15 @@ class PromoCodeController extends Controller
      */
     public function toggle(Request $request, $id)
     {
-        $provider = Auth::user();
+        $user = Auth::user();
+        $provider = $user->serviceProvider;
+
+        if (!$provider) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Provider profile not found',
+            ], 404);
+        }
 
         $promoCode = PromoCode::where('id', $id)
             ->where('provider_id', $provider->id)

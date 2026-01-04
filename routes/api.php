@@ -43,6 +43,7 @@ Route::prefix('v1')->group(function () {
 
     // Provider Discovery
     Route::get('/providers', [ServiceController::class, 'providers']);
+    Route::get('/providers-by-category', [ServiceController::class, 'topProvidersByCategory']);
     Route::get('/providers/{id}', [ServiceController::class, 'providerDetails']);
     Route::get('/search', [ServiceController::class, 'search']);
 

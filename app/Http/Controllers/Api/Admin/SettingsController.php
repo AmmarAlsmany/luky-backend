@@ -238,6 +238,9 @@ class SettingsController extends Controller
             ->whereIn('key', $keys)
             ->pluck('value', 'key');
 
+        // Add provider acceptance timeout from app_settings table
+        $settings['provider_acceptance_timeout_minutes'] = \App\Models\AppSetting::get('provider_acceptance_timeout_minutes', 30);
+
         return response()->json([
             'success' => true,
             'data' => ['settings' => $settings],
@@ -256,6 +259,7 @@ class SettingsController extends Controller
             'allow_same_day_booking' => 'nullable|boolean',
             'max_bookings_per_day' => 'nullable|integer|min:1',
             'booking_slot_duration' => 'nullable|integer|min:15',
+            'provider_acceptance_timeout_minutes' => 'nullable|integer|min:5|max:1440',
         ]);
 
         if ($validator->fails()) {
@@ -266,7 +270,13 @@ class SettingsController extends Controller
             ], 422);
         }
 
-        foreach ($request->all() as $key => $value) {
+        // Handle provider_acceptance_timeout_minutes separately (stored in app_settings)
+        if ($request->has('provider_acceptance_timeout_minutes') && $request->provider_acceptance_timeout_minutes !== null) {
+            \App\Models\AppSetting::set('provider_acceptance_timeout_minutes', $request->provider_acceptance_timeout_minutes);
+        }
+
+        // Update other settings (stored in settings table)
+        foreach ($request->except('provider_acceptance_timeout_minutes') as $key => $value) {
             if ($value !== null) {
                 $this->updateSetting($key, $value);
             }

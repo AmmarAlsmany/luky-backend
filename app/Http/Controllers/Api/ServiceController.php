@@ -47,6 +47,17 @@ class ServiceController extends Controller
             $query->where('business_type', $request->business_type);
         }
 
+        // Provider category filtering
+        if ($request->has('provider_category_id')) {
+            $query->where('provider_category_id', $request->provider_category_id);
+        }
+
+        // Filter by creation date (for "new providers" section)
+        if ($request->has('created_after_days')) {
+            $days = (int) $request->created_after_days;
+            $query->where('created_at', '>=', now()->subDays($days));
+        }
+
         // Featured providers first
         if ($request->get('featured_first', false)) {
             $query->orderByDesc('is_featured');
@@ -103,6 +114,57 @@ class ServiceController extends Controller
     }
 
     /**
+     * Get top providers grouped by category (optimized for home screen)
+     */
+    public function topProvidersByCategory(Request $request): JsonResponse
+    {
+        $cityId = $request->input('city_id');
+        $limit = min($request->input('limit', 3), 10); // Max 10 per category
+
+        // Get all active provider categories
+        $categories = \App\Models\ProviderCategory::where('is_active', true)
+            ->orderBy('sort_order', 'asc')
+            ->get();
+
+        $result = [];
+
+        foreach ($categories as $category) {
+            // Get top providers for this category
+            $query = ServiceProvider::with(['user', 'city'])
+                ->approved()
+                ->active()
+                ->where('provider_category_id', $category->id);
+
+            // Filter by city if provided
+            if ($cityId) {
+                $query->where('city_id', $cityId);
+            }
+
+            // Get top rated providers
+            $providers = $query->orderByDesc('is_featured')
+                ->orderByDesc('average_rating')
+                ->limit($limit)
+                ->get();
+
+            // Only include categories that have providers
+            if ($providers->isNotEmpty()) {
+                $result[] = [
+                    'category_id' => $category->id,
+                    'category_name_en' => $category->name_en,
+                    'category_name_ar' => $category->name_ar,
+                    'providers' => ProviderResource::collection($providers)
+                ];
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $result,
+            'total_categories' => count($result)
+        ]);
+    }
+
+    /**
      * Get single provider details
      */
     public function providerDetails(string $id): JsonResponse
@@ -110,9 +172,13 @@ class ServiceController extends Controller
         $provider = ServiceProvider::with([
             'user',
             'city',
+            'providerCategory', // Load provider category (Salon/Clinic/Spa)
             'services' => function ($query) {
                 $query->where('is_active', true)
-                      ->with('category')  // ← Load category for each service
+                      ->with([
+                          'category',  // Load old service category (legacy)
+                          'providerServiceCategory' // Load provider's custom service category
+                      ])
                       ->orderBy('sort_order');
             }
         ])
@@ -136,6 +202,7 @@ class ServiceController extends Controller
             'city_id' => 'sometimes|exists:cities,id',
             'business_type' => 'sometimes|in:salon,clinic,makeup_artist,hair_stylist',
             'category_id' => 'sometimes|exists:service_categories,id',
+            'provider_category_id' => 'sometimes|exists:provider_categories,id',
             'min_price' => 'sometimes|numeric|min:0',
             'max_price' => 'sometimes|numeric|min:0',
             'min_rating' => 'sometimes|numeric|min:0|max:5',
@@ -173,6 +240,17 @@ class ServiceController extends Controller
         // Business type filter
         if ($businessType) {
             $providersQuery->where('business_type', $businessType);
+        }
+
+        // Provider category filter
+        if ($request->has('provider_category_id')) {
+            $providersQuery->where('provider_category_id', $request->provider_category_id);
+        }
+
+        // Filter by creation date (for "new providers" section)
+        if ($request->has('created_after_days')) {
+            $days = (int) $request->created_after_days;
+            $providersQuery->where('created_at', '>=', now()->subDays($days));
         }
 
         // Location-based distance calculation (if coordinates provided)
