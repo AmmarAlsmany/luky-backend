@@ -83,8 +83,19 @@ class OtpController extends Controller
             // Soft-deleted accounts will be permanently deleted during registration
             $user = User::where('phone', $phone)->first();
             if ($user) {
+                // Provide specific error message based on user type mismatch
+                if ($appType && $user->user_type !== $appType) {
+                    $existingType = $user->user_type === 'provider' ? 'Provider' : 'Client';
+                    $attemptingType = $appType === 'provider' ? 'Provider' : 'Client';
+
+                    throw ValidationException::withMessages([
+                        'phone' => ["This phone number is already registered as a {$existingType}. Please use the Luky {$existingType} app, or use a different phone number to register as a {$attemptingType}."]
+                    ]);
+                }
+
+                // If same user type, they should login instead
                 throw ValidationException::withMessages([
-                    'phone' => ['An account already exists with this phone number.']
+                    'phone' => ['An account already exists with this phone number. Please login instead.']
                 ]);
             }
         }
