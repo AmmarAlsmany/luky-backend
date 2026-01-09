@@ -1,4 +1,4 @@
-@extends('layouts.vertical', ['title' => 'Service Categories'])
+@extends('layouts.vertical', ['title' => __('common.provider_categories')])
 
 @section('content')
     {{-- Page Header --}}
@@ -6,12 +6,12 @@
         <div class="col-12">
             <div class="d-flex align-items-center justify-content-between">
                 <div>
-                    <h4 class="mb-1 fw-bold">Service Categories</h4>
-                    <p class="text-muted mb-0">Organize your services with categories</p>
+                    <h4 class="mb-1 fw-bold">{{ __('common.provider_categories') }} ({{ __('common.business_types') }})</h4>
+                    <p class="text-muted mb-0">{{ __('common.add_business_type_desc') }}</p>
                 </div>
                 <div class="d-flex gap-2">
-                    <a href="{{ route('categories.create') }}" class="btn btn-primary">
-                        <i class="mdi mdi-plus-circle me-1"></i> Add Category
+                    <a href="{{ route('provider-categories.create') }}" class="btn btn-primary">
+                        <i class="mdi mdi-plus-circle me-1"></i> {{ __('common.add_provider_category') }}
                     </a>
                 </div>
             </div>
@@ -24,15 +24,15 @@
             <div class="card card-animate overflow-hidden">
                 <div class="position-absolute end-0 top-0 p-3">
                     <div class="avatar-md bg-primary-subtle rounded-circle">
-                        <iconify-icon icon="solar:layer-bold-duotone" class="fs-32 text-primary avatar-title"></iconify-icon>
+                        <iconify-icon icon="solar:buildings-2-bold-duotone" class="fs-32 text-primary avatar-title"></iconify-icon>
                     </div>
                 </div>
                 <div class="card-body" style="z-index: 1">
-                    <p class="text-muted text-uppercase fw-semibold fs-13 mb-2">Total Categories</p>
+                    <p class="text-muted text-uppercase fw-semibold fs-13 mb-2">{{ __('common.total_business_types') }}</p>
                     <h3 class="mb-3 fw-bold">{{ number_format($stats['total'] ?? 0) }}</h3>
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-light text-dark">
-                            <i class="mdi mdi-view-grid"></i> All Types
+                            <i class="mdi mdi-view-grid"></i> {{ __('common.all_types') }}
                         </span>
                     </div>
                 </div>
@@ -47,11 +47,11 @@
                     </div>
                 </div>
                 <div class="card-body" style="z-index: 1">
-                    <p class="text-muted text-uppercase fw-semibold fs-13 mb-2">Active Categories</p>
+                    <p class="text-muted text-uppercase fw-semibold fs-13 mb-2">{{ __('common.active_business_types') }}</p>
                     <h3 class="mb-3 fw-bold">{{ number_format($stats['active'] ?? 0) }}</h3>
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-success-subtle text-success">
-                            <i class="mdi mdi-eye"></i> Visible
+                            <i class="mdi mdi-eye"></i> {{ __('common.available') }}
                         </span>
                     </div>
                 </div>
@@ -66,11 +66,11 @@
                     </div>
                 </div>
                 <div class="card-body" style="z-index: 1">
-                    <p class="text-muted text-uppercase fw-semibold fs-13 mb-2">Inactive Categories</p>
+                    <p class="text-muted text-uppercase fw-semibold fs-13 mb-2">{{ __('common.inactive_business_types') }}</p>
                     <h3 class="mb-3 fw-bold">{{ number_format($stats['inactive'] ?? 0) }}</h3>
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge bg-danger-subtle text-danger">
-                            <i class="mdi mdi-eye-off"></i> Hidden
+                            <i class="mdi mdi-eye-off"></i> {{ __('common.hidden') }}
                         </span>
                     </div>
                 </div>
@@ -84,38 +84,38 @@
             <div class="card">
                 <div class="card-header border-bottom">
                     <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0 fw-semibold">All Categories</h5>
+                        <h5 class="card-title mb-0 fw-semibold">{{ __('common.all_provider_business_types') }}</h5>
                     </div>
                 </div>
 
                 <div class="card-body">
                     {{-- Filters --}}
-                    <form method="GET" action="{{ route('categories.index') }}" class="mb-4">
+                    <form method="GET" action="{{ route('provider-categories.index') }}" class="mb-4">
                         <div class="row g-3 align-items-end">
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Search Categories</label>
+                                <label class="form-label fw-semibold">{{ __('common.search_business_types') }}</label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-light border-end-0">
                                         <i class="mdi mdi-magnify"></i>
                                     </span>
                                     <input type="text" name="search" class="form-control border-start-0"
-                                        placeholder="Search by category name..."
+                                        placeholder="{{ __('common.search_by_business_type_name') }}"
                                         value="{{ $filters['search'] ?? '' }}">
                                 </div>
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label fw-semibold">Status Filter</label>
+                                <label class="form-label fw-semibold">{{ __('common.status_filter') }}</label>
                                 <select name="status" class="form-select">
-                                    <option value="">All Status</option>
-                                    <option value="active" {{ ($filters['status'] ?? '') == 'active' ? 'selected' : '' }}>Active Only</option>
-                                    <option value="inactive" {{ ($filters['status'] ?? '') == 'inactive' ? 'selected' : '' }}>Inactive Only</option>
+                                    <option value="">{{ __('common.all_status') }}</option>
+                                    <option value="active" {{ ($filters['status'] ?? '') == 'active' ? 'selected' : '' }}>{{ __('common.active_only') }}</option>
+                                    <option value="inactive" {{ ($filters['status'] ?? '') == 'inactive' ? 'selected' : '' }}>{{ __('common.inactive_only') }}</option>
                                 </select>
                             </div>
                             <div class="col-md-3 d-flex gap-2">
                                 <button type="submit" class="btn btn-primary flex-fill">
-                                    <i class="mdi mdi-filter-variant me-1"></i> Apply
+                                    <i class="mdi mdi-filter-variant me-1"></i> {{ __('common.apply') }}
                                 </button>
-                                <a href="{{ route('categories.index') }}" class="btn btn-soft-secondary">
+                                <a href="{{ route('provider-categories.index') }}" class="btn btn-soft-secondary">
                                     <i class="mdi mdi-refresh"></i>
                                 </a>
                             </div>
@@ -130,27 +130,36 @@
                                     <div class="card-body text-center">
                                         <div class="position-relative mb-3">
                                             @if(!empty($category['image']))
-                                                <div class="rounded-3 bg-light d-flex align-items-center justify-content-center mx-auto overflow-hidden" 
+                                                <div class="rounded-3 bg-light d-flex align-items-center justify-content-center mx-auto overflow-hidden"
                                                      style="height: 180px; width: 100%;">
-                                                    <img src="{{ $category['image'] }}" alt="{{ $category['name'] ?? '' }}" 
-                                                         class="img-fluid category-image" 
+                                                    <img src="{{ $category['image'] }}" alt="{{ $category['name'] ?? '' }}"
+                                                         class="img-fluid category-image"
                                                          style="max-height: 100%; max-width: 100%; object-fit: cover; transition: transform 0.3s ease;">
                                                 </div>
+                                            @elseif(!empty($category['color']))
+                                                <div class="rounded-3 d-flex align-items-center justify-content-center mx-auto"
+                                                     style="height: 180px; background: linear-gradient(135deg, {{ $category['color'] }}20 0%, {{ $category['color'] }}40 100%);">
+                                                    @if(!empty($category['icon']))
+                                                        <i class="mdi mdi-{{ $category['icon'] }} fs-48 opacity-75" style="color: {{ $category['color'] }};"></i>
+                                                    @else
+                                                        <iconify-icon icon="solar:buildings-2-bold-duotone" class="fs-48 opacity-75" style="color: {{ $category['color'] }};"></iconify-icon>
+                                                    @endif
+                                                </div>
                                             @else
-                                                <div class="rounded-3 bg-gradient bg-primary bg-opacity-10 d-flex align-items-center justify-content-center mx-auto" 
+                                                <div class="rounded-3 bg-gradient bg-primary bg-opacity-10 d-flex align-items-center justify-content-center mx-auto"
                                                      style="height: 180px;">
-                                                    <iconify-icon icon="solar:layer-bold-duotone" class="fs-48 text-primary opacity-75"></iconify-icon>
+                                                    <iconify-icon icon="solar:buildings-2-bold-duotone" class="fs-48 text-primary opacity-75"></iconify-icon>
                                                 </div>
                                             @endif
 
                                             <div class="position-absolute top-0 end-0 m-2">
                                                 @if($category['is_active'] ?? false)
                                                     <span class="badge bg-success shadow-sm">
-                                                        <i class="mdi mdi-check-circle"></i> Active
+                                                        <i class="mdi mdi-check-circle"></i> {{ __('common.active') }}
                                                     </span>
                                                 @else
                                                     <span class="badge bg-danger shadow-sm">
-                                                        <i class="mdi mdi-close-circle"></i> Inactive
+                                                        <i class="mdi mdi-close-circle"></i> {{ __('common.inactive') }}
                                                     </span>
                                                 @endif
                                             </div>
@@ -160,34 +169,39 @@
                                         @if(!empty($category['description']))
                                             <p class="text-muted fs-13 mb-3">{{ Str::limit($category['description'], 70) }}</p>
                                         @else
-                                            <p class="text-muted fs-13 mb-3">No description available</p>
+                                            <p class="text-muted fs-13 mb-3">{{ __('common.no_description') }}</p>
                                         @endif
 
-                                        {{-- Services Count Badge --}}
+                                        {{-- Providers Count Badge --}}
                                         <div class="mb-3">
                                             <span class="badge bg-primary-subtle text-primary">
-                                                <i class="mdi mdi-apps me-1"></i>
-                                                {{ $category['services_count'] ?? 0 }} Service(s)
+                                                <i class="mdi mdi-account-group me-1"></i>
+                                                {{ $category['providers_count'] ?? 0 }} {{ __('common.providers_count') }}
                                             </span>
+                                            @if(!empty($category['color']))
+                                                <span class="badge ms-1" style="background-color: {{ $category['color'] }}20; color: {{ $category['color'] }};">
+                                                    <i class="mdi mdi-palette"></i> {{ $category['color'] }}
+                                                </span>
+                                            @endif
                                         </div>
 
                                         <div class="d-flex justify-content-center gap-2 mt-3 pt-3 border-top">
-                                            <a href="{{ route('categories.edit', $category['id']) }}" 
-                                               class="btn btn-soft-primary btn-sm" 
-                                               data-bs-toggle="tooltip" 
-                                               title="Edit Category">
+                                            <a href="{{ route('provider-categories.edit', $category['id']) }}"
+                                               class="btn btn-soft-primary btn-sm"
+                                               data-bs-toggle="tooltip"
+                                               title="{{ __('common.edit') }} {{ __('common.business_types') }}">
                                                 <iconify-icon icon="solar:pen-2-broken" class="align-middle fs-18"></iconify-icon>
                                             </a>
-                                            <button onclick="toggleStatus({{ $category['id'] }})" 
+                                            <button onclick="toggleStatus({{ $category['id'] }})"
                                                     class="btn btn-soft-warning btn-sm"
-                                                    data-bs-toggle="tooltip" 
-                                                    title="Toggle Status">
+                                                    data-bs-toggle="tooltip"
+                                                    title="{{ __('common.status') }}">
                                                 <iconify-icon icon="solar:power-bold-duotone" class="align-middle fs-18"></iconify-icon>
                                             </button>
-                                            <button onclick="deleteCategory({{ $category['id'] }}, '{{ addslashes($category['name'] ?? 'this category') }}', {{ $category['services_count'] ?? 0 }})" 
+                                            <button onclick="deleteCategory({{ $category['id'] }}, '{{ addslashes($category['name'] ?? 'this category') }}', {{ $category['providers_count'] ?? 0 }})"
                                                     class="btn btn-soft-danger btn-sm"
-                                                    data-bs-toggle="tooltip" 
-                                                    title="Delete Category">
+                                                    data-bs-toggle="tooltip"
+                                                    title="{{ __('common.delete') }} {{ __('common.business_types') }}">
                                                 <iconify-icon icon="solar:trash-bin-minimalistic-2-broken" class="align-middle fs-18"></iconify-icon>
                                             </button>
                                         </div>
@@ -200,10 +214,10 @@
                                     <div class="avatar-xl bg-light rounded-circle d-inline-flex align-items-center justify-content-center mb-3">
                                         <iconify-icon icon="solar:inbox-line-bold-duotone" class="fs-48 text-muted"></iconify-icon>
                                     </div>
-                                    <h5 class="text-muted">No Categories Found</h5>
-                                    <p class="text-muted mb-3">Start organizing your services by creating your first category</p>
-                                    <a href="{{ route('categories.create') }}" class="btn btn-primary">
-                                        <i class="mdi mdi-plus-circle me-1"></i> Create Your First Category
+                                    <h5 class="text-muted">{{ __('common.no_business_types_found') }}</h5>
+                                    <p class="text-muted mb-3">{{ __('common.add_business_types_desc') }}</p>
+                                    <a href="{{ route('provider-categories.create') }}" class="btn btn-primary">
+                                        <i class="mdi mdi-plus-circle me-1"></i> {{ __('common.create_first_business_type') }}
                                     </a>
                                 </div>
                             </div>
@@ -217,7 +231,7 @@
 
 @section('script')
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    
+
     <style>
         .category-card {
             transition: all 0.3s ease;
@@ -233,7 +247,7 @@
             box-shadow: 0 1rem 3rem rgba(0,0,0,.175) !important;
         }
     </style>
-    
+
     <script>
         // Initialize tooltips
         document.addEventListener('DOMContentLoaded', function() {
@@ -244,8 +258,7 @@
         });
 
         function toggleStatus(categoryId) {
-            // First attempt to toggle
-            fetch(`/categories/${categoryId}/toggle-status`, {
+            fetch(`/provider-categories/${categoryId}/toggle-status`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -257,30 +270,28 @@
                 if (data.success) {
                     Swal.fire({
                         icon: 'success',
-                        title: 'Updated!',
+                        title: '{{ __('common.updated') }}!',
                         text: data.message,
                         showConfirmButton: false,
                         timer: 2000
                     }).then(() => location.reload());
                 } else if (data.warning) {
-                    // Show warning and ask for confirmation
                     Swal.fire({
-                        title: 'Warning!',
+                        title: '{{ __('common.warning') }}!',
                         html: `<p>${data.message}</p>
                                <div class="alert alert-warning mt-3">
                                    <i class="mdi mdi-alert me-1"></i>
-                                   <strong>${data.services_count} service(s)</strong> will still be accessible but the category will be hidden.
+                                   <strong>${data.providers_count} {{ __('common.providers_count') }}</strong> will still be active but this business type will be hidden from new registrations.
                                </div>`,
                         icon: 'warning',
                         showCancelButton: true,
                         confirmButtonColor: '#f59e0b',
                         cancelButtonColor: '#6c757d',
-                        confirmButtonText: 'Yes, Deactivate Anyway',
-                        cancelButtonText: 'Cancel'
+                        confirmButtonText: '{{ __('common.yes_update') }}',
+                        cancelButtonText: '{{ __('common.cancel') }}'
                     }).then((result) => {
                         if (result.isConfirmed) {
-                            // Force toggle by updating directly
-                            fetch(`/categories/${categoryId}`, {
+                            fetch(`/provider-categories/${categoryId}`, {
                                 method: 'PUT',
                                 headers: {
                                     'Content-Type': 'application/json',
@@ -292,8 +303,8 @@
                             .then(data => {
                                 Swal.fire({
                                     icon: 'success',
-                                    title: 'Deactivated!',
-                                    text: 'Category has been deactivated.',
+                                    title: '{{ __('common.updated') }}!',
+                                    text: 'Provider business type has been deactivated.',
                                     showConfirmButton: false,
                                     timer: 1500
                                 }).then(() => location.reload());
@@ -303,42 +314,41 @@
                 } else {
                     Swal.fire({
                         icon: 'error',
-                        title: 'Cannot Toggle!',
+                        title: '{{ __('common.error') }}!',
                         text: data.message
                     });
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                Swal.fire('Error!', 'Something went wrong!', 'error');
+                Swal.fire('{{ __('common.error') }}!', 'Something went wrong!', 'error');
             });
         }
 
-        function deleteCategory(categoryId, categoryName, servicesCount) {
-            // Build warning message based on services count
-            let warningHtml = `<p class="mb-2">Are you sure you want to delete the category <strong>"${categoryName}"</strong>?</p>`;
-            
-            if (servicesCount > 0) {
+        function deleteCategory(categoryId, categoryName, providersCount) {
+            let warningHtml = `<p class="mb-2">Are you sure you want to delete the provider business type <strong>"${categoryName}"</strong>?</p>`;
+
+            if (providersCount > 0) {
                 warningHtml += `
                     <div class="alert alert-danger mt-3 mb-2">
                         <i class="mdi mdi-alert-circle-outline me-1"></i>
-                        <strong>Warning:</strong> This category has <strong>${servicesCount} service(s)</strong> assigned to it.
+                        <strong>Warning:</strong> This business type has <strong>${providersCount} {{ __('common.providers_count') }}</strong> assigned to it.
                     </div>
-                    <p class="text-muted small">Deleting this category may affect all associated services. Please reassign services to another category before deletion.</p>
+                    <p class="text-muted small">Deleting this business type may affect all associated providers. Please reassign providers to another business type before deletion.</p>
                 `;
             } else {
-                warningHtml += `<p class="text-muted small">This action cannot be undone.</p>`;
+                warningHtml += `<p class="text-muted small">{{ __('common.cannot_undone') }}</p>`;
             }
 
             Swal.fire({
-                title: 'Delete Category?',
+                title: '{{ __('common.delete') }} {{ __('common.business_types') }}?',
                 html: warningHtml,
-                icon: servicesCount > 0 ? 'error' : 'warning',
+                icon: providersCount > 0 ? 'error' : 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#d33',
                 cancelButtonColor: '#6c757d',
-                confirmButtonText: '<i class="mdi mdi-delete me-1"></i> Yes, Delete It!',
-                cancelButtonText: '<i class="mdi mdi-close me-1"></i> Cancel',
+                confirmButtonText: '<i class="mdi mdi-delete me-1"></i> {{ __('common.yes_delete') }}!',
+                cancelButtonText: '<i class="mdi mdi-close me-1"></i> {{ __('common.cancel') }}',
                 customClass: {
                     confirmButton: 'btn btn-danger',
                     cancelButton: 'btn btn-secondary'
@@ -346,10 +356,9 @@
                 buttonsStyling: false
             }).then((result) => {
                 if (result.isConfirmed) {
-                    // Show loading state
                     Swal.fire({
-                        title: 'Deleting...',
-                        text: 'Please wait while we delete the category',
+                        title: '{{ __('common.deleting') }}',
+                        text: 'Please wait while we delete the business type',
                         allowOutsideClick: false,
                         allowEscapeKey: false,
                         showConfirmButton: false,
@@ -358,7 +367,7 @@
                         }
                     });
 
-                    fetch(`/categories/${categoryId}`, {
+                    fetch(`/provider-categories/${categoryId}`, {
                         method: 'DELETE',
                         headers: {
                             'Content-Type': 'application/json',
@@ -370,8 +379,8 @@
                         if (data.success) {
                             Swal.fire({
                                 icon: 'success',
-                                title: 'Deleted!',
-                                text: data.message || 'Category has been deleted successfully.',
+                                title: '{{ __('common.deleted') }}!',
+                                text: data.message || 'Provider business type has been deleted successfully.',
                                 showConfirmButton: false,
                                 timer: 1500
                             }).then(() => {
@@ -380,8 +389,8 @@
                         } else {
                             Swal.fire({
                                 icon: 'error',
-                                title: 'Error!',
-                                text: data.message || 'Failed to delete category.',
+                                title: '{{ __('common.error') }}!',
+                                text: data.message || 'Failed to delete business type.',
                                 confirmButtonColor: '#3085d6'
                             });
                         }
@@ -390,7 +399,7 @@
                         console.error('Error:', error);
                         Swal.fire({
                             icon: 'error',
-                            title: 'Error!',
+                            title: '{{ __('common.error') }}!',
                             text: 'Something went wrong! Please try again.',
                             confirmButtonColor: '#3085d6'
                         });

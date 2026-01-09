@@ -146,9 +146,8 @@ class PromoCodeController extends Controller
             ->orderBy('name_en')
             ->get(['id', 'name_en', 'name_ar']);
         
-        $categories = ServiceCategory::where('is_active', true)
-            ->orderBy('name_en')
-            ->get(['id', 'name_en', 'name_ar']);
+        // ServiceCategory removed - categories no longer available for promo codes
+        $categories = [];
 
         return view('promos.create', compact('services', 'categories'));
     }
@@ -236,9 +235,8 @@ class PromoCodeController extends Controller
             ->orderBy('name_en')
             ->get(['id', 'name_en', 'name_ar']);
         
-        $categories = ServiceCategory::where('is_active', true)
-            ->orderBy('name_en')
-            ->get(['id', 'name_en', 'name_ar']);
+        // ServiceCategory removed - categories no longer available for promo codes
+        $categories = [];
 
         return view('promos.edit', compact('promoCode', 'services', 'categories'));
     }

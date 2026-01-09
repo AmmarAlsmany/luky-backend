@@ -2,21 +2,21 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ServiceCategory;
+use App\Models\ProviderCategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
-class ServiceCategoryController extends Controller
+class ProviderCategoryController extends Controller
 {
     /**
-     * Display a listing of categories
+     * Display a listing of provider categories
      */
     public function index(Request $request)
     {
         $search = $request->input('search');
         $status = $request->input('status');
 
-        $query = ServiceCategory::withCount('services')->orderBy('sort_order', 'asc')->orderBy('created_at', 'desc');
+        $query = ProviderCategory::withCount('providers')->orderBy('sort_order', 'asc')->orderBy('created_at', 'desc');
 
         // Search filter
         if ($search) {
@@ -37,27 +37,30 @@ class ServiceCategoryController extends Controller
 
         // Transform categories data
         $categoriesData = $categories->getCollection()->map(function($category) {
+            $locale = app()->getLocale();
             return [
                 'id' => $category->id,
-                'name' => app()->getLocale() === 'ar' ? $category->name_ar : $category->name_en,
+                'name' => $locale === 'ar' ? $category->name_ar : $category->name_en,
                 'name_en' => $category->name_en,
                 'name_ar' => $category->name_ar,
-                'description' => $category->description_en ?? $category->description_ar ?? null,
+                'description' => $locale === 'ar'
+                    ? ($category->description_ar ?? $category->description_en)
+                    : ($category->description_en ?? $category->description_ar),
                 'icon' => $category->icon,
                 'color' => $category->color,
-                'image' => $category->image_url ?? null,
+                'image' => $category->icon_url ?? null,
                 'is_active' => $category->is_active,
                 'sort_order' => $category->sort_order,
-                'services_count' => $category->services_count,
+                'providers_count' => $category->providers_count,
                 'created_at' => $category->created_at,
             ];
         });
 
         // Get statistics
         $stats = [
-            'total' => ServiceCategory::count(),
-            'active' => ServiceCategory::where('is_active', true)->count(),
-            'inactive' => ServiceCategory::where('is_active', false)->count(),
+            'total' => ProviderCategory::count(),
+            'active' => ProviderCategory::where('is_active', true)->count(),
+            'inactive' => ProviderCategory::where('is_active', false)->count(),
         ];
 
         $pagination = [
@@ -69,7 +72,7 @@ class ServiceCategoryController extends Controller
 
         $filters = compact('search', 'status');
 
-        return view('services.categories.list', [
+        return view('provider-categories.list', [
             'categories' => $categoriesData,
             'stats' => $stats,
             'pagination' => $pagination,
@@ -78,15 +81,15 @@ class ServiceCategoryController extends Controller
     }
 
     /**
-     * Show the form for creating a new category
+     * Show the form for creating a new provider category
      */
     public function create()
     {
-        return view('services.categories.create');
+        return view('provider-categories.create');
     }
 
     /**
-     * Store a newly created category
+     * Store a newly created provider category
      */
     public function store(Request $request)
     {
@@ -107,36 +110,36 @@ class ServiceCategoryController extends Controller
         // Remove image from validated data (handled separately)
         unset($validated['image']);
 
-        $category = ServiceCategory::create($validated);
+        $category = ProviderCategory::create($validated);
 
         // Handle image upload if provided using Spatie Media Library
-        // This automatically creates optimized (200x200) and thumb (80x80) versions
+        // This automatically creates optimized (200x200) and thumb (100x100) versions
         if ($request->hasFile('image')) {
             $category->addMediaFromRequest('image')
                 ->toMediaCollection('category_icon');
         }
 
-        return redirect()->route('categories.index')
-            ->with('success', 'Category created successfully');
+        return redirect()->route('provider-categories.index')
+            ->with('success', 'Provider category created successfully');
     }
 
     /**
-     * Display the specified category
+     * Display the specified provider category
      */
     public function show($id)
     {
-        $category = ServiceCategory::withCount('services')->findOrFail($id);
+        $category = ProviderCategory::withCount('providers')->findOrFail($id);
 
-        return view('services.categories.show', compact('category'));
+        return view('provider-categories.show', compact('category'));
     }
 
     /**
-     * Show the form for editing the specified category
+     * Show the form for editing the specified provider category
      */
     public function edit($id)
     {
-        $cat = ServiceCategory::findOrFail($id);
-        
+        $cat = ProviderCategory::findOrFail($id);
+
         // Transform to array format for view
         $category = [
             'id' => $cat->id,
@@ -146,29 +149,29 @@ class ServiceCategoryController extends Controller
             'description_ar' => $cat->description_ar,
             'icon' => $cat->icon,
             'color' => $cat->color,
-            'image' => $cat->image_url,
+            'image' => $cat->icon_url,
             'is_active' => $cat->is_active,
             'sort_order' => $cat->sort_order,
             'created_at' => $cat->created_at,
             'updated_at' => $cat->updated_at,
         ];
 
-        return view('services.categories.edit', compact('category'));
+        return view('provider-categories.edit', compact('category'));
     }
 
     /**
-     * Update the specified category
+     * Update the specified provider category
      */
     public function update(Request $request, $id)
     {
-        $category = ServiceCategory::findOrFail($id);
+        $category = ProviderCategory::findOrFail($id);
 
         // Handle force toggle from AJAX
         if ($request->has('force_toggle') && $request->force_toggle) {
             $category->update(['is_active' => false]);
             return response()->json([
                 'success' => true,
-                'message' => 'Category deactivated successfully',
+                'message' => 'Provider category deactivated successfully',
             ]);
         }
 
@@ -192,47 +195,45 @@ class ServiceCategoryController extends Controller
         $category->update($validated);
 
         // Handle image upload if provided using Spatie Media Library
-        // This automatically creates optimized (200x200) and thumb (80x80) versions
+        // This automatically creates optimized (200x200) and thumb (100x100) versions
         if ($request->hasFile('image')) {
             $category->addMediaFromRequest('image')
                 ->toMediaCollection('category_icon');
         }
 
-        return redirect()->route('categories.index')
-            ->with('success', 'Category updated successfully');
+        return redirect()->route('provider-categories.index')
+            ->with('success', 'Provider category updated successfully');
     }
 
     /**
-     * Remove the specified category
+     * Remove the specified provider category
      */
     public function destroy($id)
     {
-        $category = ServiceCategory::withCount('services')->findOrFail($id);
+        $category = ProviderCategory::withCount('providers')->findOrFail($id);
 
-        // Check if category has any services
-        if ($category->services_count > 0) {
-            // Check if any of these services have active bookings
-            $activeBookingsCount = \App\Models\BookingItem::whereHas('service', function($q) use ($id) {
-                $q->where('category_id', $id);
+        // Check if category has any providers
+        if ($category->providers_count > 0) {
+            // Check if any of these providers have active bookings
+            $activeBookingsCount = \App\Models\Booking::whereHas('provider', function($q) use ($id) {
+                $q->where('provider_category_id', $id);
             })
-            ->whereHas('booking', function($q) {
-                $q->whereIn('status', ['pending', 'confirmed', 'in_progress']);
-            })
+            ->whereIn('status', ['pending', 'confirmed', 'in_progress'])
             ->count();
 
             // Check for any bookings (paid or unpaid)
-            $totalBookingsCount = \App\Models\BookingItem::whereHas('service', function($q) use ($id) {
-                $q->where('category_id', $id);
+            $totalBookingsCount = \App\Models\Booking::whereHas('provider', function($q) use ($id) {
+                $q->where('provider_category_id', $id);
             })
             ->count();
 
             if ($activeBookingsCount > 0) {
                 return response()->json([
                     'success' => false,
-                    'message' => "Cannot delete this category. It has {$category->services_count} service(s) with {$activeBookingsCount} active booking(s). Please complete or cancel these bookings first.",
+                    'message' => "Cannot delete this provider category. It has {$category->providers_count} provider(s) with {$activeBookingsCount} active booking(s). Please complete or cancel these bookings first.",
                     'error_type' => 'active_bookings',
                     'details' => [
-                        'services_count' => $category->services_count,
+                        'providers_count' => $category->providers_count,
                         'active_bookings' => $activeBookingsCount,
                         'total_bookings' => $totalBookingsCount
                     ]
@@ -242,73 +243,71 @@ class ServiceCategoryController extends Controller
             if ($totalBookingsCount > 0) {
                 return response()->json([
                     'success' => false,
-                    'message' => "This category has {$category->services_count} service(s) with {$totalBookingsCount} booking history. Deleting will affect booking records. Please reassign services to another category first.",
+                    'message' => "This provider category has {$category->providers_count} provider(s) with {$totalBookingsCount} booking history. Deleting will affect booking records. Please reassign providers to another category first.",
                     'error_type' => 'has_bookings',
                     'details' => [
-                        'services_count' => $category->services_count,
+                        'providers_count' => $category->providers_count,
                         'total_bookings' => $totalBookingsCount
                     ]
                 ], 422);
             }
 
-            // Category has services but no bookings
+            // Category has providers but no bookings
             return response()->json([
                 'success' => false,
-                'message' => "Cannot delete category with {$category->services_count} active service(s). Please reassign or delete these services first.",
-                'error_type' => 'has_services',
+                'message' => "Cannot delete provider category with {$category->providers_count} active provider(s). Please reassign or delete these providers first.",
+                'error_type' => 'has_providers',
                 'details' => [
-                    'services_count' => $category->services_count
+                    'providers_count' => $category->providers_count
                 ]
             ], 422);
         }
 
-        // Safe to delete - no services in this category
+        // Safe to delete - no providers in this category
         $category->delete();
 
         return response()->json([
             'success' => true,
-            'message' => 'Category deleted successfully',
+            'message' => 'Provider category deleted successfully',
         ]);
     }
 
     /**
-     * Toggle category status
+     * Toggle provider category status
      */
     public function toggleStatus($id)
     {
-        $category = ServiceCategory::withCount('services')->findOrFail($id);
-        
+        $category = ProviderCategory::withCount('providers')->findOrFail($id);
+
         // If trying to deactivate a category
         if ($category->is_active) {
-            // Check for active services in this category
-            $activeServicesCount = \App\Models\Service::where('category_id', $id)
+            // Check for active providers in this category
+            $activeProvidersCount = \App\Models\ServiceProvider::where('provider_category_id', $id)
                 ->where('is_active', true)
                 ->count();
 
-            if ($activeServicesCount > 0) {
-                // Check for active bookings on these services
-                $activeBookingsCount = \App\Models\BookingItem::whereHas('service', function($q) use ($id) {
-                    $q->where('category_id', $id)
+            if ($activeProvidersCount > 0) {
+                // Check for active bookings from these providers
+                $activeBookingsCount = \App\Models\Booking::whereHas('provider', function($q) use ($id) {
+                    $q->where('provider_category_id', $id)
                       ->where('is_active', true);
                 })
-                ->whereHas('booking', function($q) {
-                    $q->whereIn('status', ['pending', 'confirmed', 'in_progress']);
-                })
+                ->whereIn('status', ['pending', 'confirmed', 'in_progress'])
                 ->count();
 
                 if ($activeBookingsCount > 0) {
                     return response()->json([
                         'success' => false,
-                        'message' => "Cannot deactivate this category. It has {$activeServicesCount} active service(s) with {$activeBookingsCount} ongoing booking(s). Please complete or cancel these bookings first.",
+                        'message' => "Cannot deactivate this provider category. It has {$activeProvidersCount} active provider(s) with {$activeBookingsCount} ongoing booking(s). Please complete or cancel these bookings first.",
                     ], 422);
                 }
-                
-                // Has services but no active bookings - warn user
+
+                // Has providers but no active bookings - warn user
                 return response()->json([
                     'success' => false,
-                    'message' => "This category has {$activeServicesCount} active service(s). Deactivating the category will hide it from users, but services will remain active. Are you sure?",
+                    'message' => "This provider category has {$activeProvidersCount} active provider(s). Deactivating the category will hide it from new provider registrations, but existing providers will remain active. Are you sure?",
                     'warning' => true,
-                    'services_count' => $activeServicesCount,
+                    'providers_count' => $activeProvidersCount,
                 ], 422);
             }
         }
@@ -316,13 +315,13 @@ class ServiceCategoryController extends Controller
         $category->update(['is_active' => !$category->is_active]);
 
         $status = $category->is_active ? 'activated' : 'deactivated';
-        $message = "Category {$status} successfully";
-        
-        // Add info about services if deactivating
-        if (!$category->is_active && $category->services_count > 0) {
-            $message .= ". Note: {$category->services_count} service(s) in this category remain active.";
+        $message = "Provider category {$status} successfully";
+
+        // Add info about providers if deactivating
+        if (!$category->is_active && $category->providers_count > 0) {
+            $message .= ". Note: {$category->providers_count} provider(s) in this category remain active.";
         }
-        
+
         return response()->json([
             'success' => true,
             'message' => $message,

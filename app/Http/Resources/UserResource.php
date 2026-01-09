@@ -24,7 +24,8 @@ class UserResource extends JsonResource
             'date_of_birth' => $this->date_of_birth?->format('Y-m-d'),
             'age' => $this->date_of_birth ? $this->date_of_birth->age : null,
             'gender' => $this->gender,
-            
+            'profile_image_url' => $this->avatar_url,
+
             // City information
             'city' => $this->whenLoaded('city', function () {
                 return [

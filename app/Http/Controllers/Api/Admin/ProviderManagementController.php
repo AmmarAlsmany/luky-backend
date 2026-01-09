@@ -433,7 +433,7 @@ class ProviderManagementController extends Controller
         }
 
         $services = Service::where('provider_id', $id)
-            ->with(['category'])
+            ->with(['providerServiceCategory'])
             ->get();
 
         return response()->json([

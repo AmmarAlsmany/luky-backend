@@ -27,46 +27,14 @@ class CacheService
     const PREFIX_SERVICES = 'services:';
 
     /**
-     * Get all service categories (cached with lock protection)
+     * Get all service categories (DEPRECATED - Service Categories removed from system)
+     * Returns empty collection for backward compatibility
      */
     public static function getServiceCategories(): mixed
     {
-        $key = self::PREFIX_CATEGORIES . 'active';
-
-        // Try to get from cache first
-        $categories = Cache::get($key);
-
-        if ($categories === null) {
-            // Use lock to prevent cache stampede
-            $lock = Cache::lock($key . ':lock', 10);
-
-            try {
-                // Wait up to 5 seconds to acquire lock
-                $lock->block(5);
-
-                // Double-check cache after acquiring lock
-                $categories = Cache::get($key);
-
-                if ($categories === null) {
-                    // Fetch from database
-                    $categories = \App\Models\ServiceCategory::where('is_active', true)
-                        ->orderBy('sort_order')
-                        ->get();
-
-                    // Store in cache
-                    Cache::put($key, $categories, self::CACHE_HOUR);
-                }
-            } catch (\Illuminate\Contracts\Cache\LockTimeoutException $e) {
-                // Couldn't acquire lock, fetch from database directly
-                $categories = \App\Models\ServiceCategory::where('is_active', true)
-                    ->orderBy('sort_order')
-                    ->get();
-            } finally {
-                $lock?->release();
-            }
-        }
-
-        return $categories;
+        // Service Categories have been removed from the system
+        // Returning empty collection for backward compatibility
+        return collect([]);
     }
 
     /**
@@ -180,7 +148,7 @@ class CacheService
             $cacheKey,
             self::CACHE_MINUTES_30,
             function () use ($cityId, $limit) {
-                $query = \App\Models\Service::with(['provider.city', 'category'])
+                $query = \App\Models\Service::with(['provider.city'])
                     ->where('is_active', true)
                     ->whereHas('provider', function ($q) {
                         $q->where('verification_status', 'approved')

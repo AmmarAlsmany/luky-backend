@@ -116,9 +116,13 @@
                         <li class="sub-nav-item">
                             <a class="sub-nav-link" href="{{ route('services.index') }}">{{ __('common.all_services') }}</a>
                         </li>
+                        @can('manage_categories')
                         <li class="sub-nav-item">
-                            <a class="sub-nav-link" href="{{ route('categories.index') }}">{{ __('common.categories') }}</a>
+                            <a class="sub-nav-link" href="{{ route('provider-categories.index') }}">
+                                <i class="mdi mdi-store-outline me-1"></i> {{ __('common.provider_types') }}
+                            </a>
                         </li>
+                        @endcan
                     </ul>
                 </div>
             </li>

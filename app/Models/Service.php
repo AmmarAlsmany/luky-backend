@@ -14,7 +14,6 @@ class Service extends Model implements HasMedia
 
     protected $fillable = [
         'provider_id',
-        'category_id',
         'provider_service_category_id',
         'name',
         'name_ar',
@@ -55,11 +54,6 @@ class Service extends Model implements HasMedia
     public function provider()
     {
         return $this->belongsTo(ServiceProvider::class, 'provider_id');
-    }
-
-    public function category()
-    {
-        return $this->belongsTo(ServiceCategory::class, 'category_id');
     }
 
     public function providerServiceCategory()

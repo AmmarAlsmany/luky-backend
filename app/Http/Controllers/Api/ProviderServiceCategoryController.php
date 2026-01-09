@@ -263,118 +263,19 @@ class ProviderServiceCategoryController extends Controller
      */
     public function migrate(Request $request): JsonResponse
     {
-        try {
-            $user = $request->user();
-            $provider = $user->serviceProvider;
-
-            if (!$provider) {
-                return response()->json([
-                    'success' => false,
-                    'message' => __('categories.provider_not_found', [], 'en'),
-                    'message_ar' => __('categories.provider_not_found', [], 'ar'),
-                ], 404);
-            }
-
-            DB::beginTransaction();
-
-            try {
-                // Get all services for this provider
-                $services = Service::where('provider_id', $provider->id)->get();
-                $totalServices = $services->count();
-
-                if ($totalServices === 0) {
-                    DB::commit();
-                    return response()->json([
-                        'success' => true,
-                        'message' => __('categories.no_services_to_migrate', [], 'en'),
-                        'message_ar' => __('categories.no_services_to_migrate', [], 'ar'),
-                        'data' => [
-                            'is_completed' => true,
-                            'total_services' => 0,
-                            'migrated_services' => 0,
-                            'categories_created' => 0,
-                        ],
-                    ]);
-                }
-
-                // Get unique category IDs from services
-                $uniqueCategoryIds = $services->pluck('category_id')->unique()->filter();
-                $categoriesCreated = 0;
-                $migratedServices = 0;
-
-                // Create provider-owned categories for each unique system category
-                foreach ($uniqueCategoryIds as $categoryId) {
-                    $systemCategory = ServiceCategory::find($categoryId);
-
-                    if (!$systemCategory) {
-                        continue;
-                    }
-
-                    // Check if provider already has this category
-                    $existingProviderCategory = ProviderServiceCategory::forProvider($provider->id)
-                        ->where('name_en', $systemCategory->name_en)
-                        ->where('name_ar', $systemCategory->name_ar)
-                        ->first();
-
-                    if (!$existingProviderCategory) {
-                        // Create new provider category
-                        $sortOrder = ProviderServiceCategory::getNextSortOrder($provider->id);
-
-                        $providerCategory = ProviderServiceCategory::create([
-                            'provider_id' => $provider->id,
-                            'name_en' => $systemCategory->name_en,
-                            'name_ar' => $systemCategory->name_ar,
-                            'description_en' => $systemCategory->description_en,
-                            'description_ar' => $systemCategory->description_ar,
-                            'color' => $systemCategory->color,
-                            'sort_order' => $sortOrder,
-                            'is_active' => true,
-                        ]);
-
-                        $categoriesCreated++;
-                    } else {
-                        $providerCategory = $existingProviderCategory;
-                    }
-
-                    // Update all services with this category to use the provider category
-                    $updated = Service::where('provider_id', $provider->id)
-                        ->where('category_id', $categoryId)
-                        ->update(['provider_service_category_id' => $providerCategory->id]);
-
-                    $migratedServices += $updated;
-                }
-
-                DB::commit();
-
-                return response()->json([
-                    'success' => true,
-                    'message' => __('categories.migration_completed', [], 'en'),
-                    'message_ar' => __('categories.migration_completed', [], 'ar'),
-                    'data' => [
-                        'is_completed' => true,
-                        'total_services' => $totalServices,
-                        'migrated_services' => $migratedServices,
-                        'categories_created' => $categoriesCreated,
-                    ],
-                ]);
-            } catch (\Exception $e) {
-                DB::rollBack();
-                throw $e;
-            }
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => __('categories.migration_failed', [], 'en') . ': ' . $e->getMessage(),
-                'message_ar' => __('categories.migration_failed', [], 'ar') . ': ' . $e->getMessage(),
-                'data' => [
-                    'is_completed' => false,
-                    'total_services' => 0,
-                    'migrated_services' => 0,
-                    'categories_created' => 0,
-                    'error' => $e->getMessage(),
-                ],
-            ], 500);
-        }
+        // DEPRECATED: ServiceCategory system has been removed
+        // Migration is no longer needed or possible as category_id column doesn't exist
+        return response()->json([
+            'success' => true,
+            'message' => 'Migration is no longer needed. The old category system has been removed.',
+            'message_ar' => 'الترحيل لم يعد مطلوبًا. تم إزالة نظام الفئات القديم.',
+            'data' => [
+                'is_completed' => true,
+                'total_services' => 0,
+                'migrated_services' => 0,
+                'categories_created' => 0,
+            ],
+        ]);
     }
 
     /**

@@ -129,28 +129,44 @@ class ProviderResource extends JsonResource
      */
     protected function isOpenNow()
     {
-        if (!$this->working_hours) {
-            return false;
+        // If no working hours set, assume open
+        if (!$this->working_hours || empty($this->working_hours)) {
+            return true;
         }
-        
+
         $now = now();
         $currentDay = strtolower($now->format('l')); // monday, tuesday, etc.
         $currentTime = $now->format('H:i');
-        
+
         // Check if today is an off day
-        if ($this->off_days && in_array($currentDay, $this->off_days)) {
+        if ($this->off_days && is_array($this->off_days) && in_array($currentDay, $this->off_days)) {
             return false;
         }
-        
-        // Check working hours for today
-        if (isset($this->working_hours[$currentDay])) {
-            $hours = $this->working_hours[$currentDay];
-            // Check if start and end times are set
-            if (isset($hours['start']) && isset($hours['end'])) {
-                return $currentTime >= $hours['start'] && $currentTime <= $hours['end'];
+
+        // Working hours is stored as array of objects: [{"day": "sunday", "open": "09:00", "close": "17:00"}]
+        // Supports multiple shifts per day: [{"day": "sunday", "open": "09:00", "close": "13:00"}, {"day": "sunday", "open": "16:00", "close": "20:00"}]
+        if (is_array($this->working_hours)) {
+            foreach ($this->working_hours as $schedule) {
+                if (is_array($schedule) && isset($schedule['day'])) {
+                    $day = strtolower($schedule['day']);
+
+                    if ($day === $currentDay) {
+                        // Check if open and close times are set
+                        if (isset($schedule['open']) && isset($schedule['close'])) {
+                            $openTime = substr($schedule['open'], 0, 5);
+                            $closeTime = substr($schedule['close'], 0, 5);
+
+                            // Check if current time is within this shift
+                            if ($currentTime >= $openTime && $currentTime <= $closeTime) {
+                                return true; // Open in this shift
+                            }
+                        }
+                    }
+                }
             }
         }
 
+        // If no specific hours for today, assume closed
         return false;
     }
 }

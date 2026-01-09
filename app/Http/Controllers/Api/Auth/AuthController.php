@@ -271,6 +271,40 @@ class AuthController extends Controller
     }
 
     /**
+     * Upload or update user profile image
+     * Alternative endpoint for mobile apps using 'profile_image' field name
+     */
+    public function uploadProfileImage(Request $request): JsonResponse
+    {
+        $request->validate([
+            'profile_image' => 'required|image|mimes:jpeg,png,jpg|max:5120', // 5MB max
+        ]);
+
+        try {
+            $user = $request->user();
+
+            // Delete old avatar if exists
+            $user->clearMediaCollection('avatar');
+
+            // Store and optimize profile image using Spatie Media Library
+            // This automatically creates optimized (300x300 @ 85%) and thumb (100x100 @ 80%) versions
+            $user->addMediaFromRequest('profile_image')
+                ->toMediaCollection('avatar');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile image updated successfully',
+                'data' => new UserResource($user->fresh())
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload profile image: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Delete user avatar
      */
     public function deleteAvatar(Request $request): JsonResponse

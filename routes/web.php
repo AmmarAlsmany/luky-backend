@@ -7,7 +7,6 @@ use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ProviderController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\ServiceController;
-use App\Http\Controllers\ServiceCategoryController;
 use App\Http\Controllers\PromoCodeController;
 use App\Http\Controllers\UserRoleController;
 use App\Http\Controllers\ReviewController;
@@ -97,16 +96,16 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/bookings/{id}/assign', [BookingController::class, 'assignProvider'])->name('bookings.assignProvider')->middleware('permission:edit_bookings');
     Route::delete('/bookings/{id}', [BookingController::class, 'destroy'])->name('bookings.destroy')->middleware('permission:cancel_bookings');
 
-    // Service Category routes
+    // Provider Category routes (Business Types)
     Route::middleware(['permission:manage_categories'])->group(function () {
-        Route::get('/categories', [ServiceCategoryController::class, 'index'])->name('categories.index');
-        Route::get('/categories/create', [ServiceCategoryController::class, 'create'])->name('categories.create');
-        Route::post('/categories', [ServiceCategoryController::class, 'store'])->name('categories.store');
-        Route::get('/categories/{id}', [ServiceCategoryController::class, 'show'])->name('categories.show');
-        Route::get('/categories/{id}/edit', [ServiceCategoryController::class, 'edit'])->name('categories.edit');
-        Route::put('/categories/{id}', [ServiceCategoryController::class, 'update'])->name('categories.update');
-        Route::delete('/categories/{id}', [ServiceCategoryController::class, 'destroy'])->name('categories.destroy');
-        Route::post('/categories/{id}/toggle-status', [ServiceCategoryController::class, 'toggleStatus'])->name('categories.toggleStatus');
+        Route::get('/provider-categories', [\App\Http\Controllers\ProviderCategoryController::class, 'index'])->name('provider-categories.index');
+        Route::get('/provider-categories/create', [\App\Http\Controllers\ProviderCategoryController::class, 'create'])->name('provider-categories.create');
+        Route::post('/provider-categories', [\App\Http\Controllers\ProviderCategoryController::class, 'store'])->name('provider-categories.store');
+        Route::get('/provider-categories/{id}', [\App\Http\Controllers\ProviderCategoryController::class, 'show'])->name('provider-categories.show');
+        Route::get('/provider-categories/{id}/edit', [\App\Http\Controllers\ProviderCategoryController::class, 'edit'])->name('provider-categories.edit');
+        Route::put('/provider-categories/{id}', [\App\Http\Controllers\ProviderCategoryController::class, 'update'])->name('provider-categories.update');
+        Route::delete('/provider-categories/{id}', [\App\Http\Controllers\ProviderCategoryController::class, 'destroy'])->name('provider-categories.destroy');
+        Route::post('/provider-categories/{id}/toggle-status', [\App\Http\Controllers\ProviderCategoryController::class, 'toggleStatus'])->name('provider-categories.toggleStatus');
     });
 
     // Service routes

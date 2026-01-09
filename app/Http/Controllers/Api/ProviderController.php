@@ -567,7 +567,7 @@ class ProviderController extends Controller
         }
 
         $services = $provider->services()
-            ->with('category')
+            ->with('providerServiceCategory')
             ->orderBy('sort_order')
             ->get();
 
@@ -599,7 +599,7 @@ class ProviderController extends Controller
         }
 
         $validated = $request->validate([
-            'category_id' => 'nullable|exists:service_categories,id',
+            // 'category_id' => 'nullable|exists:service_categories,id', // DEPRECATED - ServiceCategory removed
             'provider_service_category_id' => [
                 'required',
                 Rule::exists('provider_service_categories', 'id')->where(function ($query) use ($provider) {
@@ -628,7 +628,7 @@ class ProviderController extends Controller
         }
 
         $service = $provider->services()->create([
-            'category_id' => $validated['category_id'] ?? null,
+            // 'category_id' => $validated['category_id'] ?? null, // DEPRECATED - ServiceCategory removed
             'provider_service_category_id' => $validated['provider_service_category_id'],
             'name' => $validated['name'],
             'name_en' => $validated['name_en'] ?? null,
@@ -676,7 +676,7 @@ class ProviderController extends Controller
         $service = $provider->services()->findOrFail($serviceId);
 
         $validated = $request->validate([
-            'category_id' => 'sometimes|exists:service_categories,id',
+            // 'category_id' => 'sometimes|exists:service_categories,id', // DEPRECATED - ServiceCategory removed
             'provider_service_category_id' => [
                 'sometimes',
                 Rule::exists('provider_service_categories', 'id')->where(function ($query) use ($provider) {

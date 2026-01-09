@@ -3,28 +3,29 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\ServiceCategory;
+// use App\Models\ServiceCategory; // DEPRECATED - ServiceCategory removed
 use App\Models\ServiceProvider;
 use App\Models\Service;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use App\Http\Resources\ServiceCategoryResource;
+// use App\Http\Resources\ServiceCategoryResource; // DEPRECATED - ServiceCategory removed
 use App\Http\Resources\ProviderResource;
 use App\Http\Resources\ServiceResource;
 
 class ServiceController extends Controller
 {
     /**
-     * Get all active service categories (cached)
+     * Get all active service categories (DEPRECATED)
      */
     public function categories(): JsonResponse
     {
-        $categories = \App\Services\CacheService::getServiceCategories();
-
+        // DEPRECATED: ServiceCategory system has been removed
+        // Returning empty response for backward compatibility
         return response()->json([
             'success' => true,
-            'data' => ServiceCategoryResource::collection($categories),
-            'total' => $categories->count()
+            'message' => 'Service categories have been deprecated. Please use provider categories instead.',
+            'data' => [],
+            'total' => 0
         ]);
     }
 
@@ -176,7 +177,6 @@ class ServiceController extends Controller
             'services' => function ($query) {
                 $query->where('is_active', true)
                       ->with([
-                          'category',  // Load old service category (legacy)
                           'providerServiceCategory' // Load provider's custom service category
                       ])
                       ->orderBy('sort_order');
@@ -201,7 +201,7 @@ class ServiceController extends Controller
             'query' => 'sometimes|string|min:2',
             'city_id' => 'sometimes|exists:cities,id',
             'business_type' => 'sometimes|in:salon,clinic,makeup_artist,hair_stylist',
-            'category_id' => 'sometimes|exists:service_categories,id',
+            // 'category_id' => 'sometimes|exists:service_categories,id', // DEPRECATED - ServiceCategory removed
             'provider_category_id' => 'sometimes|exists:provider_categories,id',
             'min_price' => 'sometimes|numeric|min:0',
             'max_price' => 'sometimes|numeric|min:0',
@@ -276,12 +276,9 @@ class ServiceController extends Controller
             }
         }
 
-        // Category filter
-        if ($request->has('category_id')) {
-            $providersQuery->whereHas('services', function ($q) use ($request) {
-                $q->where('category_id', $request->category_id);
-            });
-        }
+        // Category filter (DEPRECATED - ServiceCategory removed)
+        // Old category_id filter removed as ServiceCategory system was deprecated
+        // Use provider_category_id for filtering by business types instead
 
         // Minimum rating filter
         if ($request->has('min_rating')) {
@@ -386,7 +383,7 @@ class ServiceController extends Controller
             'filters_applied' => [
                 'city_id' => $cityId,
                 'business_type' => $businessType,
-                'category_id' => $request->category_id,
+                'provider_category_id' => $request->provider_category_id,
                 'min_price' => $request->min_price,
                 'max_price' => $request->max_price,
                 'min_rating' => $request->min_rating,
@@ -413,7 +410,7 @@ class ServiceController extends Controller
     public function getAllServices(Request $request): JsonResponse
     {
         $request->validate([
-            'category_id' => 'sometimes|exists:service_categories,id',
+            // 'category_id' => 'sometimes|exists:service_categories,id', // DEPRECATED - ServiceCategory removed
             'provider_id' => 'sometimes|exists:service_providers,id',
             'city_id' => 'sometimes|exists:cities,id',
             'min_price' => 'sometimes|numeric|min:0',
@@ -422,17 +419,16 @@ class ServiceController extends Controller
             'sort' => 'sometimes|in:price_low,price_high,duration,popular',
         ]);
 
-        $query = Service::with(['provider.city', 'category'])
+        $query = Service::with(['provider.city', 'providerServiceCategory'])
             ->where('is_active', true)
             ->whereHas('provider', function ($q) {
                 $q->where('verification_status', 'approved')
                     ->where('is_active', true);
             });
 
-        // Filter by category
-        if ($request->has('category_id')) {
-            $query->where('category_id', $request->category_id);
-        }
+        // Filter by category (DEPRECATED - ServiceCategory removed)
+        // Old category_id filter removed as ServiceCategory system was deprecated
+        // Use provider_service_category_id for filtering by provider's custom categories instead
 
         // Filter by provider
         if ($request->has('provider_id')) {
@@ -500,7 +496,7 @@ class ServiceController extends Controller
     {
         $request->validate([
             'query' => 'required|string|min:2',
-            'category_id' => 'sometimes|exists:service_categories,id',
+            // 'category_id' => 'sometimes|exists:service_categories,id', // DEPRECATED - ServiceCategory removed
             'city_id' => 'sometimes|exists:cities,id',
             'business_type' => 'sometimes|in:salon,clinic,makeup_artist,hair_stylist',
             'available_at_home' => 'sometimes|boolean',
@@ -508,7 +504,7 @@ class ServiceController extends Controller
 
         $searchTerm = $request->query;
 
-        $query = Service::with(['provider.city', 'category'])
+        $query = Service::with(['provider.city', 'providerServiceCategory'])
             ->where('is_active', true)
             ->whereHas('provider', function ($q) {
                 $q->where('verification_status', 'approved')
@@ -519,10 +515,9 @@ class ServiceController extends Controller
                     ->orWhere('description', 'ILIKE', "%{$searchTerm}%");
             });
 
-        // Filter by category
-        if ($request->has('category_id')) {
-            $query->where('category_id', $request->category_id);
-        }
+        // Filter by category (DEPRECATED - ServiceCategory removed)
+        // Old category_id filter removed as ServiceCategory system was deprecated
+        // Use provider_service_category_id for filtering by provider's custom categories instead
 
         // Filter by city
         if ($request->has('city_id')) {
@@ -551,7 +546,6 @@ class ServiceController extends Controller
             'data' => ServiceResource::collection($services->items()),
             'query' => $searchTerm,
             'filters_applied' => [
-                'category_id' => $request->category_id,
                 'city_id' => $request->city_id,
                 'business_type' => $request->business_type,
                 'available_at_home' => $request->available_at_home,
@@ -569,29 +563,14 @@ class ServiceController extends Controller
      */
     public function popularServicesByCategory(Request $request, int $categoryId): JsonResponse
     {
-        $category = ServiceCategory::findOrFail($categoryId);
-
-        $services = Service::with(['provider.city', 'category'])
-            ->where('category_id', $categoryId)
-            ->where('is_active', true)
-            ->whereHas('provider', function ($q) {
-                $q->where('verification_status', 'approved')
-                    ->where('is_active', true);
-            })
-            ->withCount('bookingItems')
-            ->orderByDesc('booking_items_count')
-            ->limit(10)
-            ->get();
-
+        // DEPRECATED: ServiceCategory system has been removed
+        // Returning empty response for backward compatibility
         return response()->json([
             'success' => true,
-            'category' => [
-                'id' => $category->id,
-                'name_ar' => $category->name_ar,
-                'name_en' => $category->name_en,
-            ],
-            'data' => ServiceResource::collection($services),
-            'total' => $services->count()
+            'message' => 'Service categories have been deprecated. Please use provider service categories instead.',
+            'data' => [],
+            'category' => null,
+            'total' => 0
         ]);
     }
 
@@ -600,98 +579,34 @@ class ServiceController extends Controller
      */
     public function categoryPriceRange(Request $request, int $categoryId): JsonResponse
     {
-        $category = ServiceCategory::findOrFail($categoryId);
-
-        $priceStats = Service::where('category_id', $categoryId)
-            ->where('is_active', true)
-            ->whereHas('provider', function ($q) {
-                $q->where('verification_status', 'approved')
-                    ->where('is_active', true);
-            })
-            ->selectRaw('
-            MIN(price) as min_price,
-            MAX(price) as max_price,
-            AVG(price) as avg_price,
-            COUNT(*) as total_services
-        ')
-            ->first();
-
+        // DEPRECATED: ServiceCategory system has been removed
+        // Returning empty response for backward compatibility
         return response()->json([
             'success' => true,
-            'category' => [
-                'id' => $category->id,
-                'name_ar' => $category->name_ar,
-                'name_en' => $category->name_en,
-            ],
+            'message' => 'Service categories have been deprecated. Please use provider service categories instead.',
+            'category' => null,
             'price_range' => [
-                'min' => (float) $priceStats->min_price,
-                'max' => (float) $priceStats->max_price,
-                'average' => round((float) $priceStats->avg_price, 2),
-                'total_services' => $priceStats->total_services,
+                'min' => 0,
+                'max' => 0,
+                'average' => 0,
+                'total_services' => 0,
             ]
         ]);
     }
 
     /**
-     * Get services grouped by category (optimized to prevent N+1)
+     * Get services grouped by category (DEPRECATED)
      */
     public function servicesGroupedByCategory(Request $request): JsonResponse
     {
-        $request->validate([
-            'city_id' => 'sometimes|exists:cities,id',
-            'provider_id' => 'sometimes|exists:service_providers,id',
-        ]);
-
-        $categories = \App\Services\CacheService::getServiceCategories();
-
-        // Build base query for services
-        $servicesQuery = Service::with(['provider', 'category'])
-            ->where('is_active', true)
-            ->whereHas('provider', function ($q) {
-                $q->where('verification_status', 'approved')
-                    ->where('is_active', true);
-            });
-
-        // Apply filters
-        if ($request->has('city_id')) {
-            $servicesQuery->whereHas('provider', function ($q) use ($request) {
-                $q->where('city_id', $request->city_id);
-            });
-        }
-
-        if ($request->has('provider_id')) {
-            $servicesQuery->where('provider_id', $request->provider_id);
-        }
-
-        // Get all services at once (prevent N+1)
-        $allServices = $servicesQuery->get();
-
-        // Group services by category
-        $servicesByCategory = $allServices->groupBy('category_id');
-
-        $result = [];
-
-        foreach ($categories as $category) {
-            $categoryServices = $servicesByCategory->get($category->id);
-
-            if ($categoryServices && $categoryServices->isNotEmpty()) {
-                $result[] = [
-                    'category' => [
-                        'id' => $category->id,
-                        'name_ar' => $category->name_ar,
-                        'name_en' => $category->name_en,
-                        'icon' => $category->icon,
-                        'color' => $category->color,
-                    ],
-                    'services' => ServiceResource::collection($categoryServices->take(5)),
-                    'total_services' => $categoryServices->count(),
-                ];
-            }
-        }
-
+        // DEPRECATED: ServiceCategory system has been removed
+        // This endpoint relied on the old category_id system which no longer exists
+        // Services are now organized by provider_service_category_id (custom categories per provider)
+        // Returning empty response for backward compatibility
         return response()->json([
             'success' => true,
-            'data' => $result
+            'message' => 'Service categories have been deprecated. Services are now organized by provider-specific categories.',
+            'data' => []
         ]);
     }
 
@@ -725,10 +640,10 @@ class ServiceController extends Controller
     {
         $request->validate([
             'city_id' => 'sometimes|exists:cities,id',
-            'category_id' => 'sometimes|exists:service_categories,id',
+            // 'category_id' => 'sometimes|exists:service_categories,id', // DEPRECATED - ServiceCategory removed
         ]);
 
-        $query = Service::with(['provider.city', 'category'])
+        $query = Service::with(['provider.city', 'providerServiceCategory'])
             ->where('is_active', true)
             ->where('available_at_home', true)
             ->whereHas('provider', function ($q) {
@@ -743,10 +658,9 @@ class ServiceController extends Controller
             });
         }
 
-        // Filter by category
-        if ($request->has('category_id')) {
-            $query->where('category_id', $request->category_id);
-        }
+        // Filter by category (DEPRECATED - ServiceCategory removed)
+        // Old category_id filter removed as ServiceCategory system was deprecated
+        // Use provider_service_category_id for filtering by provider's custom categories instead
 
         $perPage = min($request->get('per_page', 20), 50);
         $services = $query->paginate($perPage);

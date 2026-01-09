@@ -262,7 +262,7 @@ class ProviderController extends Controller
     public function create()
     {
         $cities = City::select('id', 'name_en', 'name_ar')->get();
-        $categories = \App\Models\ServiceCategory::active()->get();
+        $categories = \App\Models\ProviderCategory::where('is_active', true)->orderBy('sort_order')->get();
         return view('provider.create', compact('cities', 'categories'));
     }
 
@@ -276,7 +276,7 @@ class ProviderController extends Controller
             'email' => 'required|email|unique:users,email',
             'phone' => 'required|string|unique:users,phone',
             'business_name' => 'required|string|max:255',
-            'category_id' => 'required|exists:service_categories,id',
+            'provider_category_id' => 'required|exists:provider_categories,id',
             'description' => 'nullable|string|max:1000',
             'city_id' => 'required|exists:cities,id',
             'address' => 'nullable|string|max:500',
@@ -295,9 +295,9 @@ class ProviderController extends Controller
 
         DB::beginTransaction();
         try {
-            // Get category and map to business_type
-            $category = \App\Models\ServiceCategory::findOrFail($validated['category_id']);
-            $businessType = $category->getBusinessType();
+            // Get provider category
+            $providerCategory = \App\Models\ProviderCategory::findOrFail($validated['provider_category_id']);
+            $businessType = strtolower($providerCategory->name_en); // Use category name as business type
 
             // Create new user
             $user = User::create([
@@ -521,11 +521,11 @@ class ProviderController extends Controller
                 'duration_minutes' => $service->duration_minutes ?? 0,
                 'available_at_home' => $service->available_at_home ?? false,
                 'home_service_price' => $service->home_service_price ?? null,
-                'category_id' => $service->category_id ?? null,
-                'category' => $service->category ? [
-                    'id' => $service->category->id,
-                    'name_en' => $service->category->name_en ?? '',
-                    'name_ar' => $service->category->name_ar ?? '',
+                'provider_service_category_id' => $service->provider_service_category_id ?? null,
+                'provider_service_category' => $service->providerServiceCategory ? [
+                    'id' => $service->providerServiceCategory->id,
+                    'name_en' => $service->providerServiceCategory->name_en ?? '',
+                    'name_ar' => $service->providerServiceCategory->name_ar ?? '',
                 ] : null,
                 'is_active' => $service->is_active ?? true,
                 'is_featured' => $service->is_featured ?? false,
@@ -541,18 +541,18 @@ class ProviderController extends Controller
             ->limit(10)
             ->get();
 
-        // Calculate profit by category (revenue per service category)
+        // Calculate profit by provider service category (revenue per service category)
         $profitByCategory = DB::table('booking_items')
             ->join('bookings', 'booking_items.booking_id', '=', 'bookings.id')
             ->join('services', 'booking_items.service_id', '=', 'services.id')
-            ->join('service_categories', 'services.category_id', '=', 'service_categories.id')
+            ->leftJoin('provider_service_categories', 'services.provider_service_category_id', '=', 'provider_service_categories.id')
             ->where('bookings.provider_id', $id)
             ->where('bookings.status', 'completed')
             ->select(
-                'service_categories.name_en as name',
+                DB::raw('COALESCE(provider_service_categories.name_en, "Uncategorized") as name'),
                 DB::raw('SUM(booking_items.total_price) as amount')
             )
-            ->groupBy('service_categories.id', 'service_categories.name_en')
+            ->groupBy('provider_service_categories.id', 'provider_service_categories.name_en')
             ->get();
 
         // Calculate total for percentages

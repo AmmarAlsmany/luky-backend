@@ -114,6 +114,14 @@ class BookingController extends Controller
             $startDateTime = $validated['booking_date'] . ' ' . $validated['start_time'];
             $endDateTime = date('Y-m-d H:i:s', strtotime($startDateTime) + ($totalDuration * 60));
 
+            // Validate that booking time is not in the past
+            $bookingDateTime = Carbon::parse($startDateTime);
+            if ($bookingDateTime->isPast()) {
+                throw ValidationException::withMessages([
+                    'start_time' => ['Cannot book appointments in the past. Please select a future date and time.']
+                ]);
+            }
+
             // Check if time is within working hours
             $this->validateWorkingHours($provider, $validated['booking_date'], $validated['start_time']);
 
@@ -256,7 +264,7 @@ class BookingController extends Controller
     protected function validateWorkingHours(ServiceProvider $provider, string $date, string $time)
     {
         $dayOfWeek = strtolower(date('l', strtotime($date)));
-        
+
         // Check if day is off
         if ($provider->off_days && in_array($dayOfWeek, $provider->off_days)) {
             throw ValidationException::withMessages([
@@ -265,12 +273,50 @@ class BookingController extends Controller
         }
 
         // Check working hours
-        if ($provider->working_hours && isset($provider->working_hours[$dayOfWeek])) {
-            $workingHours = $provider->working_hours[$dayOfWeek];
+        // Working hours can be in array format: [{"day": "sunday", "open": "09:00", "close": "17:00"}]
+        // Supports multiple shifts per day: [{"day": "sunday", "open": "09:00", "close": "13:00"}, {"day": "sunday", "open": "16:00", "close": "20:00"}]
+        if ($provider->working_hours && is_array($provider->working_hours)) {
+            $dayShifts = [];
 
-            if ($time < $workingHours['open'] || $time > $workingHours['close']) {
+            // Find all shifts for the requested day (provider may have multiple shifts)
+            foreach ($provider->working_hours as $schedule) {
+                if (is_array($schedule) && isset($schedule['day'])) {
+                    if (strtolower($schedule['day']) === $dayOfWeek) {
+                        $dayShifts[] = $schedule;
+                    }
+                }
+            }
+
+            // If we found shifts for this day, validate the time falls within at least one shift
+            if (!empty($dayShifts)) {
+                $bookingTime = substr($time, 0, 5);
+                $isWithinShift = false;
+                $shiftsDisplay = [];
+
+                foreach ($dayShifts as $shift) {
+                    if (isset($shift['open']) && isset($shift['close'])) {
+                        $openTime = substr($shift['open'], 0, 5);
+                        $closeTime = substr($shift['close'], 0, 5);
+                        $shiftsDisplay[] = "{$openTime} - {$closeTime}";
+
+                        // Check if booking time falls within this shift
+                        if ($bookingTime >= $openTime && $bookingTime <= $closeTime) {
+                            $isWithinShift = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!$isWithinShift) {
+                    $shiftsText = implode(', ', $shiftsDisplay);
+                    throw ValidationException::withMessages([
+                        'start_time' => ["Time is outside provider working hours ({$shiftsText})."]
+                    ]);
+                }
+            } else {
+                // No working hours defined for this day - provider is closed
                 throw ValidationException::withMessages([
-                    'start_time' => ['Time is outside provider working hours.']
+                    'booking_date' => ['Provider has no working hours defined for this day.']
                 ]);
             }
         }

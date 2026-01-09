@@ -35,10 +35,14 @@ class ServiceResource extends JsonResource
             'gallery' => $this->gallery ?? [],
 
             // Category info
-            'category_id' => $this->category_id,
             'provider_service_category_id' => $this->provider_service_category_id,
-            'category' => $this->whenLoaded('category', function () {
-                return new ServiceCategoryResource($this->category);
+            'provider_service_category' => $this->whenLoaded('providerServiceCategory', function () {
+                return [
+                    'id' => $this->providerServiceCategory->id,
+                    'name' => $this->providerServiceCategory->name,
+                    'name_ar' => $this->providerServiceCategory->name_ar,
+                    'name_en' => $this->providerServiceCategory->name_en,
+                ];
             }),
 
             'provider' => $this->whenLoaded('provider', function () {

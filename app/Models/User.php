@@ -280,11 +280,8 @@ class User extends Authenticatable implements HasMedia
             return \Storage::url($this->avatar);
         }
 
-        // Use gender-based default avatar
-        $defaultAvatar = $this->gender === 'female'
-            ? 'images/default-avatar-female.svg'
-            : 'images/default-avatar-male.svg';
-
-        return asset($defaultAvatar);
+        // Return null for mobile apps - let them show their own default avatars
+        // This avoids SVG compatibility issues with Flutter's Image widget
+        return null;
     }
 }

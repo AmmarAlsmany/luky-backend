@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Service;
-use App\Models\ServiceCategory;
 use App\Models\ServiceProvider;
 use Illuminate\Http\Request;
 
@@ -20,7 +19,7 @@ class ServiceController extends Controller
         $status = $request->input('status');
         $serviceLocation = $request->input('service_location');
 
-        $query = Service::with(['category', 'provider.user']);
+        $query = Service::with(['providerServiceCategory', 'provider.user']);
 
         // Search filter
         if ($search) {
@@ -35,10 +34,8 @@ class ServiceController extends Controller
             });
         }
 
-        // Category filter
-        if ($categoryId) {
-            $query->where('category_id', $categoryId);
-        }
+        // Category filter (DEPRECATED - ServiceCategory removed)
+        // Old category_id filter removed as ServiceCategory system was deprecated
 
         // Provider filter
         if ($providerId) {
@@ -88,9 +85,9 @@ class ServiceController extends Controller
                 'center_service_available' => !$service->available_at_home || $service->available_at_home === false,
                 'image' => $service->image_url,
                 'images' => $service->images,
-                'category' => $service->category ? [
-                    'id' => $service->category->id,
-                    'name' => app()->getLocale() === 'ar' ? $service->category->name_ar : $service->category->name_en,
+                'provider_service_category' => $service->providerServiceCategory ? [
+                    'id' => $service->providerServiceCategory->id,
+                    'name' => app()->getLocale() === 'ar' ? $service->providerServiceCategory->name_ar : $service->providerServiceCategory->name_en,
                 ] : null,
                 'provider' => $service->provider ? [
                     'id' => $service->provider->id,
@@ -110,15 +107,8 @@ class ServiceController extends Controller
             })->count(),
         ];
 
-        // Get categories for filter
-        $categories = ServiceCategory::select('id', 'name_ar', 'name_en')
-            ->get()
-            ->map(function($cat) {
-                return [
-                    'id' => $cat->id,
-                    'name' => app()->getLocale() === 'ar' ? $cat->name_ar : $cat->name_en,
-                ];
-            });
+        // Categories removed - ServiceCategory system deprecated
+        $categories = [];
 
         // Get providers for filter
         $providers = ServiceProvider::with('user')->get()->map(function($provider) {
@@ -162,7 +152,8 @@ class ServiceController extends Controller
      */
     public function create(Request $request)
     {
-        $categories = ServiceCategory::where('is_active', true)->orderBy('sort_order')->get();
+        // ServiceCategory removed - categories no longer used
+        $categories = [];
         $providers = ServiceProvider::with('user')->get();
         $selectedProviderId = $request->input('provider_id'); // Pre-select if coming from provider details
 
@@ -176,7 +167,7 @@ class ServiceController extends Controller
     {
         $validated = $request->validate([
             'provider_id' => 'required|exists:service_providers,id',
-            'category_id' => 'required|exists:service_categories,id',
+            // 'category_id' => 'required|exists:service_categories,id', // DEPRECATED - ServiceCategory removed
             'name_en' => 'required|string|max:255',
             'name_ar' => 'required|string|max:255',
             'description_en' => 'nullable|string|max:1000',
@@ -217,7 +208,7 @@ class ServiceController extends Controller
      */
     public function show($id)
     {
-        $service = Service::with(['category', 'provider.user', 'bookingItems'])->findOrFail($id);
+        $service = Service::with(['providerServiceCategory', 'provider.user', 'bookingItems'])->findOrFail($id);
 
         // Get service statistics
         $stats = [
@@ -234,7 +225,8 @@ class ServiceController extends Controller
     public function edit($id)
     {
         $service = Service::findOrFail($id);
-        $categories = ServiceCategory::where('is_active', true)->orderBy('sort_order')->get();
+        // ServiceCategory removed - categories no longer used
+        $categories = [];
         $providers = ServiceProvider::with('user')->get();
 
         return view('services.edit', compact('service', 'categories', 'providers'));
@@ -249,7 +241,7 @@ class ServiceController extends Controller
 
         $validated = $request->validate([
             'provider_id' => 'required|exists:service_providers,id',
-            'category_id' => 'required|exists:service_categories,id',
+            // 'category_id' => 'required|exists:service_categories,id', // DEPRECATED - ServiceCategory removed
             'name_en' => 'required|string|max:255',
             'name_ar' => 'required|string|max:255',
             'description_en' => 'nullable|string|max:1000',
@@ -346,7 +338,7 @@ class ServiceController extends Controller
     public function byProvider($providerId)
     {
         $services = Service::where('provider_id', $providerId)
-            ->with(['category'])
+            ->with(['providerServiceCategory'])
             ->get();
 
         return response()->json([
@@ -364,7 +356,7 @@ class ServiceController extends Controller
 
         $services = Service::where('name', 'LIKE', "%{$query}%")
             ->orWhere('description', 'LIKE', "%{$query}%")
-            ->with(['category', 'provider'])
+            ->with(['providerServiceCategory', 'provider'])
             ->take(10)
             ->get();
 

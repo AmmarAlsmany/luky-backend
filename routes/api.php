@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\PromoCodeController;
 use App\Http\Controllers\Api\ProviderCategoryController;
 use App\Http\Controllers\Api\ProviderServiceCategoryController;
 use App\Http\Controllers\Api\Provider\PromoCodeController as ProviderPromoCodeController;
+use App\Http\Controllers\Api\WalletController;
 
 // Public routes - No authentication required
 Route::prefix('v1')->group(function () {
@@ -69,8 +70,16 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active', 'validate.app.type'])
     // User Profile Management
     Route::get('/user/profile', [AuthController::class, 'profile']);
     Route::put('/user/profile', [AuthController::class, 'updateProfile']);
+    Route::post('/user/profile/image', [AuthController::class, 'uploadProfileImage']);
     Route::delete('/user/account', [AuthController::class, 'deleteAccount']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
+
+    // Wallet Management
+    Route::get('/wallet', [WalletController::class, 'index']);
+    Route::get('/wallet/transactions', [WalletController::class, 'transactions']);
+    Route::post('/wallet/deposit', [WalletController::class, 'deposit']);
+    Route::post('/wallet/verify-payment', [WalletController::class, 'verifyPayment']);
+    Route::get('/wallet/callback', [WalletController::class, 'callback']);
 
     // Provider Registration & Management
     Route::middleware(['role:client|provider|admin|super_admin'])->group(function () {
