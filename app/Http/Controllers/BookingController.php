@@ -146,7 +146,7 @@ class BookingController extends Controller
         $booking = Booking::with([
             'client',
             'provider.user',
-            'items.service.category',
+            'items.service.providerServiceCategory',
             'payment',
             'review'
         ])->findOrFail($id);
@@ -229,11 +229,11 @@ class BookingController extends Controller
                         'description' => $item->service->description ?? '',
                         'duration' => $item->service->duration ?? null,
                         'image' => $item->service->image_url ?? null,
-                        'category' => $item->service->category ? [
-                            'id' => $item->service->category->id,
-                            'name' => $item->service->category->name_en ?? $item->service->category->name_ar ?? $item->service->category->name ?? 'N/A',
-                            'name_en' => $item->service->category->name_en ?? 'N/A',
-                            'name_ar' => $item->service->category->name_ar ?? 'N/A',
+                        'category' => $item->service->providerServiceCategory ? [
+                            'id' => $item->service->providerServiceCategory->id,
+                            'name' => $item->service->providerServiceCategory->name_en ?? $item->service->providerServiceCategory->name_ar ?? 'N/A',
+                            'name_en' => $item->service->providerServiceCategory->name_en ?? 'N/A',
+                            'name_ar' => $item->service->providerServiceCategory->name_ar ?? 'N/A',
                         ] : null,
                     ],
                     'quantity' => $item->quantity,
@@ -279,8 +279,8 @@ class BookingController extends Controller
                 'duration' => $booking->items->first()->service->duration ?? 'N/A',
                 'image' => $booking->items->first()->service->image_url ?? null,
             ] : null,
-            'service_category' => $booking->items->first() && $booking->items->first()->service->category ? [
-                'name' => $booking->items->first()->service->category->name_en ?? $booking->items->first()->service->category->name ?? 'N/A',
+            'service_category' => $booking->items->first() && $booking->items->first()->service->providerServiceCategory ? [
+                'name' => $booking->items->first()->service->providerServiceCategory->name_en ?? $booking->items->first()->service->providerServiceCategory->name ?? 'N/A',
             ] : null,
         ];
 

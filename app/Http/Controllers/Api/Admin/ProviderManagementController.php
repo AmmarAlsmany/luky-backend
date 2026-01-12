@@ -522,20 +522,21 @@ class ProviderManagementController extends Controller
             ->whereYear('created_at', now()->year)
             ->sum('total_amount');
 
-        // Get revenue by category
+        // Get revenue by category (using provider service categories)
         $categoryRevenue = DB::table('bookings')
             ->join('booking_items', 'bookings.id', '=', 'booking_items.booking_id')
             ->join('services', 'booking_items.service_id', '=', 'services.id')
-            ->join('service_categories', 'services.category_id', '=', 'service_categories.id')
+            ->leftJoin('provider_service_categories', 'services.provider_service_category_id', '=', 'provider_service_categories.id')
             ->where('bookings.provider_id', $id)
             ->where('bookings.status', 'completed')
             ->select(
-                'service_categories.id as category_id',
-                'service_categories.name_en',
-                'service_categories.name_ar',
+                'provider_service_categories.id as category_id',
+                'provider_service_categories.name_en',
+                'provider_service_categories.name_ar',
                 DB::raw('SUM(booking_items.total_price) as revenue')
             )
-            ->groupBy('service_categories.id', 'service_categories.name_en', 'service_categories.name_ar')
+            ->whereNotNull('provider_service_categories.id')
+            ->groupBy('provider_service_categories.id', 'provider_service_categories.name_en', 'provider_service_categories.name_ar')
             ->get();
 
         // Calculate percentages and format categories

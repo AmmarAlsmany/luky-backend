@@ -72,10 +72,10 @@ class ProviderResource extends JsonResource
                         'home_service_price' => $service->home_service_price ? (float) $service->home_service_price : null,
                         'duration_minutes' => $service->duration_minutes,
 
-                        // Old category (legacy support)
-                        'category_id' => $service->category_id,
-                        'category_name_ar' => $service->category?->name_ar,
-                        'category_name_en' => $service->category?->name_en,
+                        // Old category (DEPRECATED - legacy support removed)
+                        'category_id' => null,
+                        'category_name_ar' => null,
+                        'category_name_en' => null,
 
                         // Provider Service Category (NEW - custom categories)
                         'provider_service_category_id' => $service->provider_service_category_id,

@@ -655,7 +655,7 @@ class ProviderController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Service created successfully',
-            'data' => new ServiceResource($service->fresh()->load('category'))
+            'data' => new ServiceResource($service->fresh()->load('providerServiceCategory'))
         ], 201);
     }
 
@@ -713,7 +713,7 @@ class ProviderController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Service updated successfully',
-            'data' => new ServiceResource($service->fresh()->load('category'))
+            'data' => new ServiceResource($service->fresh()->load('providerServiceCategory'))
         ]);
     }
 

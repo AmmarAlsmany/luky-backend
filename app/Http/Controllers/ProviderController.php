@@ -404,7 +404,7 @@ class ProviderController extends Controller
      */
     public function show($id)
     {
-        $providerProfile = ServiceProvider::with(['user', 'city', 'services.category', 'documents', 'contracts' => function($q) {
+        $providerProfile = ServiceProvider::with(['user', 'city', 'services.providerServiceCategory', 'documents', 'contracts' => function($q) {
             $q->latest();
         }])->findOrFail($id);
         $provider = $providerProfile->user;

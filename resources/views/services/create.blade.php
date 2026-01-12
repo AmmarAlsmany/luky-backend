@@ -46,23 +46,10 @@
                                 @enderror
                             </div>
 
-                            <div class="col-md-6">
-                                <label for="category_id" class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
-                                <select class="form-select @error('category_id') is-invalid @enderror"
-                                    id="category_id" name="category_id" required>
-                                    <option value="">Select Category</option>
-                                    @foreach($categories as $category)
-                                        <option value="{{ $category->id }}" {{ old('category_id') == $category->id ? 'selected' : '' }}>
-                                            {{ $category->name_en }} / {{ $category->name_ar }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('category_id')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                @enderror
-                            </div>
+                            {{-- Category field removed - ServiceCategory system deprecated --}}
+                            {{-- Providers now use custom categories via ProviderServiceCategory --}}
 
-                            <div class="col-md-6">
+                            <div class="col-12">
                                 <label for="name_en" class="form-label fw-semibold">Service Name (English) <span class="text-danger">*</span></label>
                                 <input type="text" class="form-control @error('name_en') is-invalid @enderror"
                                     id="name_en" name="name_en" value="{{ old('name_en') }}"
@@ -72,7 +59,7 @@
                                 @enderror
                             </div>
 
-                            <div class="col-md-6">
+                            <div class="col-12">
                                 <label for="name_ar" class="form-label fw-semibold">Service Name (Arabic) <span class="text-danger">*</span></label>
                                 <input type="text" class="form-control @error('name_ar') is-invalid @enderror"
                                     id="name_ar" name="name_ar" value="{{ old('name_ar') }}"
